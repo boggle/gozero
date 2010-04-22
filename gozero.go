@@ -8,8 +8,9 @@ import "C"
 import "unsafe"                                                         
 import "runtime"
 import "sync"         
-import "os"    
-import "syscall"    
+import "os"   
+import "syscall" 
+import "strconv"    
 
 // Constants
 
@@ -25,15 +26,22 @@ type InitArgs struct {
 	Flags		int
 }
 
-func DefaultInitArgs() InitArgs {
+func DefaultInitArgs() InitArgs {  
+	var maxProcs, error = strconv.Atoi(os.Getenv("GOMAXPROCS"))
+   	if (error == nil) {
+		return InitArgs{AppThreads: maxProcs, IoThreads: 1, Flags: POLL}	
+	} 
+	// else
 	return InitArgs{AppThreads: 1, IoThreads: 1, Flags: POLL}
 }
                   
 // Context Wrapper
 
 type Context struct {  
-	ptr			unsafe.Pointer       
-	sync.Mutex
+	ptr			unsafe.Pointer       	
+	InitArgs
+
+	sync.Mutex                       
 }
                      
 func InitDefaultContext() *Context { return InitContext(DefaultInitArgs()) }
@@ -47,13 +55,10 @@ func InitContext(args InitArgs) *Context {
 		C.int(args.IoThreads), 
 		C.int(args.Flags))
                       
-    catchError(func (errno int) os.Error { switch errno {
-			case syscall.EINVAL: return os.EINVAL
-	  	} 
-		return nil })
-	
+    catchError(osErrorFun)	
 
 	var context *Context = &Context{ptr: contextPtr}
+	context.InitArgs = args
 	runtime.SetFinalizer(context, FinalizeContext)
 	return context
 }                                
@@ -70,20 +75,29 @@ func FinalizeContext(context *Context) {
 	}
 }
 
-
-  
 // Error Handling Helpers
-                      
-type ErrorFun func (int) os.Error
-
-func catchError(errFun ErrorFun) {
+     
+type errorFun func (int) os.Error
+          
+func catchError(errFun errorFun) {
 	var c_errno = int(C.get_errno())
 	if (c_errno != 0) {
 		var error = errFun(c_errno)
 		if (error == nil) {
-			panic(os.NewSyscallError("Unexpected Error", c_errno))
+			panic(os.NewSyscallError("Unexpected errno from zeromq", c_errno))
 		} else { 
 			panic(error) 
 		}
 	}
 }
+
+func osErrorFun(errno int) os.Error { 
+	switch errno {
+	case syscall.EINVAL: 
+		return os.EINVAL
+	default: 
+  	} 
+	return nil 
+}
+   
+// {}  
