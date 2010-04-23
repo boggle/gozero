@@ -31,6 +31,11 @@ func NewGoThread() *GoThread {
 	return thr
 }
 
+// Check if this go thread has finished
+func (p *GoThread) HasFinished() bool {
+	return !p.locked
+}
+
 // Register a finalizer to be called when this GoThread finishes
 func (p *GoThread) OnFinish(x OSThreadBound) {
 	defer x.OnOSThreadLock(p)

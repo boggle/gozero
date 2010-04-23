@@ -6,5 +6,5 @@ func main() {
 	var thr = gozero.NewGoThread()
 	defer thr.Finish()
 
-	gozero.InitDefaultContext(thr)
+	gozero.InitDefaultContext()
 }
