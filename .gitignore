@@ -2,9 +2,11 @@
 *.so
 *.6
 *.8
+*.swp
 _cgo*
 _obj/**
 *cgo1*
 *cgo2*
 main
+
 

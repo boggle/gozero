@@ -3,7 +3,8 @@ include $(GOROOT)/src/Make.$(GOARCH)
 PKGDIR=$(GOROOT)/pkg/$(GOOS)_$(GOARCH)
 
 TARG=gozero
-CGOFILES=gozero.go
+CGOFILES=utils.go gozero.go
+CGO_CFLAGS=-I.
 CGO_LDFLAGS=-lzmq
 
 include $(GOROOT)/src/Make.pkg

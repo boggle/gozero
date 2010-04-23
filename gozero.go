@@ -1,16 +1,14 @@
 package gozero
                        
-// #include <errno.h>
-// int get_errno() { return errno; }
 // #include <zmq.h>
+// #include "get_errno.h"
 import "C"
 
 import "unsafe"                                                         
-import "runtime"
 import "sync"         
 import "os"   
 import "syscall" 
-import "strconv"    
+import "strconv"     
 
 // Constants
 
@@ -23,7 +21,7 @@ const (
 type InitArgs struct {
 	AppThreads 	int
 	IoThreads 	int
-	Flags		int
+	Flags				int
 }
 
 func DefaultInitArgs() InitArgs {  
@@ -36,37 +34,37 @@ func DefaultInitArgs() InitArgs {
 }
                   
 // Context Wrapper
-
 type Context struct {  
 	ptr			unsafe.Pointer       	
 	InitArgs
 
-	sync.Mutex                       
+	lock		sync.Mutex                       
 }
                      
-func InitDefaultContext() *Context { return InitContext(DefaultInitArgs()) }
+func InitDefaultContext(thr *GoThread) *Context { 
+	return InitContext(thr, DefaultInitArgs()) 
+}
                               
-func InitContext(args InitArgs) *Context {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+func InitContext(thr *GoThread, args InitArgs) *Context {
 	
 	var contextPtr unsafe.Pointer = C.zmq_init(
 		C.int(args.AppThreads), 
 		C.int(args.IoThreads), 
 		C.int(args.Flags))
                       
-    catchError(osErrorFun)	
+    CatchError(zmqErrnoFun)	
 
 	var context *Context = &Context{ptr: contextPtr}
 	context.InitArgs = args
-	runtime.SetFinalizer(context, FinalizeContext)
+	thr.OnFinish(context)
 	return context
 }                                
 
+func (context *Context) OnOSThreadLock(thr *GoThread) {}
 
-func FinalizeContext(context *Context) { 
-	context.Lock()              
-	defer context.Unlock()
+func (context *Context) OnOSThreadUnlock(thr *GoThread) { 
+	context.lock.Lock()              
+	defer context.lock.Unlock()
 	
 	var contextPtr = context.ptr
 	if (contextPtr != nil) {   
@@ -75,29 +73,14 @@ func FinalizeContext(context *Context) {
 	}
 }
 
-// Error Handling Helpers
-     
-type errorFun func (int) os.Error
-          
-func catchError(errFun errorFun) {
-	var c_errno = int(C.get_errno())
-	if (c_errno != 0) {
-		var error = errFun(c_errno)
-		if (error == nil) {
-			panic(os.NewSyscallError("Unexpected errno from zeromq", c_errno))
-		} else { 
-			panic(error) 
-		}
-	}
+func zmqErrnoFun(errno int) os.Error {
+  switch errno {
+  case syscall.EINVAL:
+    return os.EINVAL
+  default:
+  }
+  return nil
 }
 
-func osErrorFun(errno int) os.Error { 
-	switch errno {
-	case syscall.EINVAL: 
-		return os.EINVAL
-	default: 
-  	} 
-	return nil 
-}
-   
-// {}  
+
+

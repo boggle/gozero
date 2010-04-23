@@ -1,10 +1,10 @@
 package main
 
-import (
-//	"fmt"
-	"gozero"
-)
+import "gozero"
 
 func main() {
-	gozero.InitDefaultContext()
+	var thr = gozero.NewGoThread()
+	defer thr.Finish()
+
+	gozero.InitDefaultContext(thr)
 }
