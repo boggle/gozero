@@ -4,7 +4,7 @@ import "zmq"
 
 func main() {
 	ctxCh := make(chan zmq.Context)
-  refCh := make(chan *zmq.RefC)
+  refCh := make(chan zmq.RefC)
 
 	zmq.Thunk(func () {
 		context := zmq.InitLibZmqContext(zmq.DefaultInitArgs())

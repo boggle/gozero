@@ -88,7 +88,7 @@ func (p lzmqContext) Terminate() {
 		Thunk(func () { 
 		  CondCatchError(int(C.zmq_term(ptr)) == -1, libZmqErrnoFun)
 	 	  ch <- nil
-		}).GoOSThread()
+		}).NewOSThread()
     // Wait for completion
 	  <- ch
 	}

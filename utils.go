@@ -2,6 +2,7 @@ package zmq
      
 import "os"   
 import "runtime"
+import "unsafe"
 
 // #include "get_errno.c"
 import "C"
@@ -20,30 +21,36 @@ type Closeable interface { Close() }
 
 type Thunk func()
 
-// Helper for calling thunk within a separate go routine bound to a fixed OSThread
-func (p Thunk) GoOSThread() {
-	go func() {
+// Wrap thunk in calls for locking the OSThread
+func (p Thunk) WithOSThread() Thunk {
+	return Thunk(func() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
 		p()
-	}()
+	})
+}
+
+// Helper for calling thunk within a separate go routine bound to a fixed OSThread
+func (p Thunk) NewOSThread() {
+	go p.WithOSThread()
 }
 
 // Reference counter
-type RefC uint32
+type RefC uintptr
 
 // Create new reference counter that will call thunk when done
-// (Instantly spawns a goroutine)
-func (p Thunk) NewRefC(initialCount uint32) *RefC { 
-	ref := new(RefC)
-	*ref = RefC(initialCount)
-	go func() { defer p(); ref.Decr(); }()
-	return ref
+// (Instantly spawns a goroutine with thunk)
+func (p Thunk) NewRefC(initialCount uint32) RefC { 
+	ref  := new(uint32)
+	*ref  = initialCount
+  refc := RefC(unsafe.Pointer(ref))
+	go func() { defer p(); refc.Decr(); }()
+	return refc
 }
 
-func (p *RefC) Incr() { runtime.Semrelease((*uint32)(p)) } 
-func (p *RefC) Decr() { runtime.Semacquire((*uint32)(p)) } 
+func (p RefC) Incr() { runtime.Semrelease((*uint32)(unsafe.Pointer(p))) } 
+func (p RefC) Decr() { runtime.Semacquire((*uint32)(unsafe.Pointer(p))) } 
 
 
 
