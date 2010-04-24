@@ -3,11 +3,18 @@ package main
 import "zmq"
 
 func main() {
-	context := (<- zmq.WithOSThread(func (thr *zmq.GoThread, ch chan interface{}) {
+	ch := make(chan zmq.Context)
+	zmq.Thunk(func () {
 		context := zmq.InitLibZmqContext(zmq.DefaultInitArgs())
 		ch <- context
 
-	})).(zmq.Context)
-	defer context.Close()
+		srv := context.NewSocket(zmq.ZmqP2P)
+		defer srv.Close()
+	}).GoOSThread()
+
+	context := <- ch
+
+	cl := context.NewSocket(zmq.ZmqP2P)
+	defer cl.Close()
 }
 

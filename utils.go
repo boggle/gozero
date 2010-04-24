@@ -2,7 +2,6 @@ package zmq
      
 import "os"   
 import "runtime"
-import vector "container/vector"
 
 // #include "get_errno.c"
 import "C"
@@ -11,105 +10,24 @@ import "C"
 
 // ******** Closeable ********
 
-// (Thread-safe) interface for all artefacts that initially are open and later 
+// Interface for all artefacts that initially are open and later 
 // may be closed/terminated
-type Closeable interface {
-	CondDo(openState bool, thunk func()) bool
-	Close()
-}
-
-var errAlreadyClosed = os.NewError("Closeable already closed yet expected to be open")
-
-// Thrown if a Closeable already has been closed (Terminated, Finished, ...)
-func ErrAlreadyClosed() os.Error { return errAlreadyClosed }
+type Closeable interface { Close() }
 
 
 
-// ******** GoThreads ********
+// ******** Thunks ********
 
-// Datastructure for encapsulating locking a goroutine to an OSThread
-// Do not use from multiple goroutines.  
-//
-// Lock may be released by calling Finish, this will execute all registered
-// finalizers
-type GoThread struct {
-	Closeable
+type Thunk func()
 
-	locked	bool							// true if GoThread has locked on OSThread
-	thunks	*vector.Vector		// Vector of thunks to be called on UnlockOSThread
-}
-
-// Type of all artefacts that may be tied to a GoThread
-type OSThreadBound interface {
-  OnOSThreadLock(thr *GoThread)
-	OnOSThreadUnlock(thr *GoThread)
-}
-
-// Create a new GoThread and lock the current goroutine to the 
-// executing OSThread
-func NewGoThread() *GoThread {
-	thr := new(GoThread)
-	runtime.LockOSThread()
-	thr.locked = true
-	thr.thunks = new(vector.Vector)
-	return thr
-}
-
-// Calls thunk if this GoThread is open and openState is true or
-// Calls thunk if this GoThread is closed and openState is false.
-// Returns true iff thunk was called, false otherwise.
-func (p *GoThread) CondDo(openState bool, thunk func()) bool {
-	if (p.locked == openState) { thunk(); return true; }
-	return false;
-}
-
-// Panics unless this GoThread is still locked on its OSThread
-func (p *GoThread) EnsureOSThreadBound() {
-	if (! p.locked) { panic(errAlreadyClosed) }
-}
-
-// Register a finalizer to be called when this GoThread finishes
-func (p *GoThread) Register(x OSThreadBound) {
-	p.EnsureOSThreadBound()
-	defer x.OnOSThreadLock(p)
-
-	p.thunks.Push(x)
-}
-
-
-// Finish this GoThread and execute all finalizers that have been registered
-// Panic otherwise
-func (p *GoThread) Close() {
-	if (p.locked) { 
-		defer p.unlock()
-
-		for i := 0; i < p.thunks.Len(); i++ {
-			p.thunks.Pop().(OSThreadBound).OnOSThreadUnlock(p)
-		}
-	} else {
-		panic(errAlreadyClosed)
-	}
-}
-
-func (p *GoThread) unlock() {
-		p.locked = false
-		runtime.UnlockOSThread()
-}
-
-// Functions running in an independent OSThreadBound go routine
-type OSTFun func (*GoThread, chan interface{})
-
-// Helper for calling thunk within a separate go routine bound to an OSThread
-func WithOSThread(thunk OSTFun) (chan interface{}) {
-	ch := make(chan interface{})
-
+// Helper for calling thunk within a separate go routine bound to a fixed OSThread
+func (p Thunk) GoOSThread() {
 	go func() {
-		thr := NewGoThread()
-		defer thr.Close()
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 
-		thunk(thr, ch)
+		p()
 	}()
-	return ch
 }
 
 
