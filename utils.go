@@ -33,7 +33,7 @@ func (p Thunk) WithOSThread() Thunk {
 
 // Helper for calling thunk within a separate go routine bound to a fixed OSThread
 func (p Thunk) NewOSThread() {
-	go p.WithOSThread()
+	go (p.WithOSThread())()
 }
 
 // Reference counter

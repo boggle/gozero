@@ -100,6 +100,9 @@ func (p lzmqContext) Terminate() {
 // ZMQ Socket type
 type Socket interface{
 	Closeable
+
+	Bind(address string)
+	Connect(address string)
 }
 
 // libzmq socket wrapper
@@ -108,11 +111,27 @@ type lzmqSocket uintptr
 // Creates a new Socket with the given socketType
 //
 // Sockets only must be used from a fixed OSThread. This may be achieved
-// by conveniently using Thunk.GoOSThread() or by calling runtime.LockOSThread()
+// by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) Socket {
 	ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
 	CondCatchError(ptr == nil, libZmqErrnoFun)
 	return lzmqSocket(ptr)
+}
+
+// Bind server socket
+func (p lzmqSocket) Bind(address string) {
+	ptr    := unsafe.Pointer(p)
+  c_addr := C.CString(address)
+	defer C.free(unsafe.Pointer(c_addr))
+  CondCatchError(C.zmq_bind(ptr, c_addr) == -1, libZmqErrnoFun)
+}
+
+// Connect client socket
+func (p lzmqSocket) Connect(address string) {
+	ptr    := unsafe.Pointer(p)
+  c_addr := C.CString(address)
+	defer C.free(unsafe.Pointer(c_addr))
+  CondCatchError(C.zmq_connect(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
 // Closes this socket 
@@ -127,23 +146,8 @@ func (p lzmqSocket) Close() {
 
 // ******** LibZmq Error Handling *******
 
-var errEMTHREAD os.Error = os.NewError("ZMQ: EMTHREAD")
-var errEFSM os.Error = os.NewError("ZMQ: EFSM")
-var errENOCOMPATPROTO os.Error = os.NewError("ZMQ: ENOCOMPATPROTO")
-
 // Default ErrnoFun used for libzmq syscalls
-func libZmqErrnoFun(errno os.Errno) os.Error {
-  switch errno {
-  case os.Errno(C.EMTHREAD):
-		return errEMTHREAD	
-  case os.Errno(C.EFSM):
-		return errEFSM
-  case os.Errno(C.ENOCOMPATPROTO):
-		return errENOCOMPATPROTO
-  default:
-  }
-  return nil
-}
+func libZmqErrnoFun(errno os.Errno) os.Error { return errno }
 
 // {}
 
