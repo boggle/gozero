@@ -1,10 +1,13 @@
 package main
 
-import "gozero"
+import "zmq"
 
 func main() {
-	var thr = gozero.NewGoThread()
-	defer thr.Finish()
+	context := (<- zmq.WithOSThread(func (thr *zmq.GoThread, ch chan interface{}) {
+		context := zmq.InitLibZmqContext(zmq.DefaultInitArgs())
+		ch <- context
 
-	gozero.InitDefaultContext()
+	})).(zmq.Context)
+	defer context.Close()
 }
+
