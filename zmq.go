@@ -61,7 +61,6 @@ func DefaultInitArgs() InitArgs {
 }
                      
 // Setup a program-wide thread-safe zmq context object
-// Expects to be run in a separate go routine safely locked to an OS Thread
 func InitLibZmqContext(args InitArgs) Context {
 	contextPtr := C.zmq_init(
 		C.int(args.AppThreads), 

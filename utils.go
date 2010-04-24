@@ -30,9 +30,25 @@ func (p Thunk) GoOSThread() {
 	}()
 }
 
+// Reference counter
+type RefC uint32
+
+// Create new reference counter that will call thunk when done
+// (Instantly spawns a goroutine)
+func (p Thunk) NewRefC(initialCount uint32) *RefC { 
+	ref := new(RefC)
+	*ref = RefC(initialCount)
+	go func() { defer p(); ref.Decr(); }()
+	return ref
+}
+
+func (p *RefC) Incr() { runtime.Semrelease((*uint32)(p)) } 
+func (p *RefC) Decr() { runtime.Semacquire((*uint32)(p)) } 
 
 
-// ******** ERROR HANDLING ********
+
+
+// ******** Error Handling ********
 
 // Panics with error if cond is true
 func CondPanic(cond bool, error os.Error) {
