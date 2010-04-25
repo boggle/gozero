@@ -1,0 +1,18 @@
+- LL interface: Here for maximal performance...
+- Finish copying version of Message
+  - May already require reflect to peel apart []byte pointers or 
+    reify byte* data into []byte's although that raises quite a few
+    GC questions... so better go the other way round
+- Test Send/Receive
+- Wait for golang to replace their GC()...
+- Try wether (un)reflect + C-based alloca is enough for stack allocation of Messages
+  - Open Question: How to get free right...
+
+- Thoughts about HL interface:
+	- HL interface: Here to protect you, no easy foot shooting
+	- SocketManager: Manages Sockets. :-) Requires Reification of LL interface into go messages
+    (Create Socket, Drop Socket etc. or clever use of lambdas sent to SocketManager via some
+     control channel)
+  - PushForwarder
+  - PullForwarder
+  - Helpers for encoding native go format and protobuf
