@@ -1,11 +1,106 @@
 package zmq
      
 import "os"   
-import "runtime"
-import "unsafe"
+import rt "runtime"
+import "sync"
 
 // #include "get_errno.c"
 import "C"
+
+
+
+// ******** Thunks ********
+
+// A simple argumentless function with no return value
+type Thunk func()
+
+// Wrap thunk in calls that lock the executing go routine to some OSThread
+func (p Thunk) WithOSThread() Thunk {
+	return Thunk(func() {
+		rt.LockOSThread()
+		defer rt.UnlockOSThread()
+
+		p()
+	})
+}
+
+// Helper for calling thunk within a separate go routine bound to a 
+// fixed OSThread
+func (p Thunk) RunInOSThread() {
+	go (p.WithOSThread())()
+}
+
+// Wrap thunk such that it sends notifi after finishing
+// (May discard errors!)
+func (p Thunk) Syncing(ch chan interface{}, msg interface{}) Thunk {
+	return Thunk(func() {
+		defer func() { ch <- msg }()
+		p()
+	})
+}
+
+// Reference counter interface
+type RefC interface {
+	Incr()
+	Decr()
+}
+
+// Sample RefC implementation
+type refC struct {
+	lock   sync.Mutex
+  count  uint32 
+  thunk  Thunk
+}
+
+var ErrRefC = os.NewError("RefC exhausted")
+
+// Create new reference counter that will call thunk when done
+// (Instantly spawns a goroutine with thunk)
+func (p Thunk) RefC(initialCount uint32) RefC { 
+	if (initialCount == 0) {
+		// Somewhat pointless yet valid
+		ret := &refC{count: 0, thunk: nil}
+		go p()
+		return ret
+  }
+	return &refC{count: initialCount, thunk: p}
+}
+
+
+// Increment RefC, panic if already 0
+func (p *refC) Incr() { 
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if (p.count == 0) { panic(ErrRefC) }
+	p.count++
+}
+
+// Decrement RefC, calling thunk if 0 is reached.
+// Panics if already at 0.
+func (p *refC) Decr() { 
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	switch p.count {
+	case 0: 
+		panic(ErrRefC)
+	case 1: 
+		thunk := p.thunk
+		p.thunk = nil
+		p.count = 0
+		go thunk() 
+	default:
+		p.count--
+	}
+}
+
+// Create new reference counter that will call thunk when done,
+// followed by sending p over chan
+// (Instantly spawns a goroutine with thunk)
+func (p Thunk) SyncingRefC(initialCount uint32, ch chan interface{}, msg interface{}) RefC {
+	return (p.Syncing(ch, msg)).RefC(initialCount)
+}
 
 
 
@@ -15,43 +110,13 @@ import "C"
 // may be closed/terminated
 type Closeable interface { Close() }
 
-
-
-// ******** Thunks ********
-
-type Thunk func()
-
-// Wrap thunk in calls for locking the OSThread
-func (p Thunk) WithOSThread() Thunk {
-	return Thunk(func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		p()
-	})
+// Returns RefC that triggers closeable.Close and channel that will
+// deliver closeable value afer the RefC went down to 0
+func SyncOnClose(c Closeable, initCount uint32) (refc RefC, ch chan interface{}) {
+	ch = make(chan interface{})
+  refc = Thunk(func() { c.Close() }).SyncingRefC(initCount, ch, c)
+	return
 }
-
-// Helper for calling thunk within a separate go routine bound to a fixed OSThread
-func (p Thunk) NewOSThread() {
-	go (p.WithOSThread())()
-}
-
-// Reference counter
-type RefC uintptr
-
-// Create new reference counter that will call thunk when done
-// (Instantly spawns a goroutine with thunk)
-func (p Thunk) NewRefC(initialCount uint32) RefC { 
-	ref  := new(uint32)
-	*ref  = initialCount
-  refc := RefC(unsafe.Pointer(ref))
-	go func() { defer p(); refc.Decr(); }()
-	return refc
-}
-
-func (p RefC) Incr() { runtime.Semrelease((*uint32)(unsafe.Pointer(p))) } 
-func (p RefC) Decr() { runtime.Semacquire((*uint32)(unsafe.Pointer(p))) } 
-
 
 
 

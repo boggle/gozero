@@ -1,38 +1,62 @@
 package main
 
-import "zmq"
-import "runtime"
+import .  "zmq"
+import rt "runtime"
+import "os"
+import "syscall"
+import "fmt"
 	
-func main() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+func Server(ctx Context, refc RefC, addr string) { 
+	rt.LockOSThread()
+	defer rt.UnlockOSThread()
+	defer refc.Decr()
 
-	ctxCh := make(chan zmq.Context)
-  // refCh := make(chan zmq.RefC)
+	srv := ctx.NewSocket(ZmqRep)
+	defer srv.Close()
 
-	zmq.Thunk(func () {
-		context := zmq.InitLibZmqContext(zmq.DefaultInitArgs())
-    // refc := zmq.Thunk(func () { context.Terminate() }).NewRefC(1)
+	fmt.Println("About to bind server socket on ", addr)
+	srv.Bind(addr)
+	fmt.Println("Bound.")
+	syscall.Sleep(10*1000*1000*1000)
+}
 
-		srv := context.NewSocket(zmq.ZmqRep)
-		defer srv.Close()
-		// defer refc.Decr();
+func Client(ctx Context, refc RefC, addr string) { 
+	rt.LockOSThread()
+	defer rt.UnlockOSThread()
+	defer refc.Decr()
 
-		srv.Bind("tcp://127.0.0.1:5555")
-
-		ctxCh <- context
-	  // refCh <- refc
-
-	}).NewOSThread()
-
-	context := <- ctxCh
-  // refc    := <- refCh
-	// defer refc.Incr()
-
-	cl := context.NewSocket(zmq.ZmqReq)
+	cl := ctx.NewSocket(ZmqRep)
 	defer cl.Close()
-	// defer refc.Decr()
 
-	cl.Connect("tcp://127.0.0.1:5555")
+	fmt.Println("About to connect client socket on ", addr)
+	cl.Connect(addr)
+	fmt.Println("Connected.")
+	syscall.Sleep(10*1000*1000*1000)
+}
+
+func main() {
+	ctx := InitLibZmqContext(DefaultInitArgs())
+  var refc, synch = SyncOnClose(ctx, 2)
+
+	if (len(os.Args) != 3) 	{
+		fmt.Println(os.Args[0], "srv|cl|all addr")
+		os.Exit(1)
+	} else 	{
+    mode := os.Args[1]
+		addr := os.Args[2]
+		switch {
+			case mode == "srv":
+				go Server(ctx, refc, addr)
+				refc.Decr()
+			case mode == "cl":
+				go Client(ctx, refc, addr)
+				refc.Decr()
+			case mode == "all":
+				go Server(ctx, refc, addr)
+				go Client(ctx, refc, addr)
+		}
+		fmt.Println("main: Waiting to finish")
+		<- synch
+	} 
 }
 

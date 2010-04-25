@@ -5,7 +5,7 @@ package zmq
 // #include "get_errno.h"
 import "C"
 
-import "unsafe"                                                         
+import X "unsafe"
 import "os"   
 import "strconv"     
 
@@ -60,7 +60,15 @@ func DefaultInitArgs() InitArgs {
 	return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 1, Flags: ZmqPoll}
 }
                      
-// Setup a program-wide thread-safe zmq context object
+// Creates a zmq context and returns it.
+//
+// Don't forget to set GOMAXPROCS appropriately when working with libzmq.
+//
+// Contexts are finalized by the GC unless they are manually destructed 
+// by calling Terminate() beforehand.  Applications need to arrange
+// that no socket is used or even closed after the owning context has
+// been destructed.  This requires to have at least one running go routine
+// with a live referene to the context.
 func InitLibZmqContext(args InitArgs) Context {
 	contextPtr := C.zmq_init(
 		C.int(args.AppThreads), 
@@ -81,14 +89,14 @@ func (p lzmqContext) Close() { p.Terminate() }
 // Only call once
 func (p lzmqContext) Terminate() {
 	ch  := make(chan interface{})
-	ptr := unsafe.Pointer(p)
+	ptr := X.Pointer(p)
 	if (ptr != nil) {
-  	// Needs to run in separate GoRoutine to safely lock the OS Thread
+  	// Needs to run in separate go routine to safely lock the OS Thread
   	// and synchronize via channel to know when we're done
 		Thunk(func () { 
 		  CondCatchError(int(C.zmq_term(ptr)) == -1, libZmqErrnoFun)
 	 	  ch <- nil
-		}).NewOSThread()
+		}).RunInOSThread()
     // Wait for completion
 	  <- ch
 	}
@@ -113,24 +121,24 @@ type lzmqSocket uintptr
 // Sockets only must be used from a fixed OSThread. This may be achieved
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) Socket {
-	ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
+	ptr := X.Pointer(C.zmq_socket(X.Pointer(p), C.int(socketType)))
 	CondCatchError(ptr == nil, libZmqErrnoFun)
 	return lzmqSocket(ptr)
 }
 
 // Bind server socket
 func (p lzmqSocket) Bind(address string) {
-	ptr    := unsafe.Pointer(p)
+	ptr    := X.Pointer(p)
   c_addr := C.CString(address)
-	defer C.free(unsafe.Pointer(c_addr))
+	defer C.free(X.Pointer(c_addr))
   CondCatchError(C.zmq_bind(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
 // Connect client socket
 func (p lzmqSocket) Connect(address string) {
-	ptr    := unsafe.Pointer(p)
+	ptr    := X.Pointer(p)
   c_addr := C.CString(address)
-	defer C.free(unsafe.Pointer(c_addr))
+	defer C.free(X.Pointer(c_addr))
   CondCatchError(C.zmq_connect(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
@@ -139,7 +147,7 @@ func (p lzmqSocket) Connect(address string) {
 // Expects the executing go routine to still be locked onto an OSThread.
 // May be called only once 
 func (p lzmqSocket) Close() {
-	CondCatchError(int(C.zmq_close(unsafe.Pointer(p))) == -1, libZmqErrnoFun)
+	CondCatchError(int(C.zmq_close(X.Pointer(p))) == -1, libZmqErrnoFun)
 }
 
 
