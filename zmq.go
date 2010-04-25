@@ -1,85 +1,121 @@
 package zmq
-                       
+
 // #include <zmq.h>
 // #include <stdlib.h>
 // #include "get_errno.h"
 import "C"
 
 import X "unsafe"
-import "os"   
-import "strconv"     
-
+import "os"
 
 
 // ******** Global ZMQ Constants ********
 
 const (
-	ZmqPoll 		  = C.ZMQ_POLL
-  ZmqP2P  		  = C.ZMQ_P2P
-  ZmqPub  		  = C.ZMQ_PUB
-  ZmqSub  		  = C.ZMQ_SUB
-  ZmqReq  		  = C.ZMQ_REQ
-  ZmqRep  		  = C.ZMQ_REP
+  ZmqPoll       = C.ZMQ_POLL
+  ZmqP2P        = C.ZMQ_P2P
+  ZmqPub        = C.ZMQ_PUB
+  ZmqSub        = C.ZMQ_SUB
+  ZmqReq        = C.ZMQ_REQ
+  ZmqRep        = C.ZMQ_REP
   ZmqUpstream   = C.ZMQ_UPSTREAM
-	ZmqDownstream = C.ZMQ_DOWNSTREAM
+  ZmqDownstream = C.ZMQ_DOWNSTREAM
 )
 
 
+// ******** ZMQ Interfaces ********
 
-// ********* Contexts and InitArgs **********
+type Provider interface {
+  NewContext(initArgs InitArgs) Context
 
-// ZMQ Context type
-type Context interface {
-	Closeable
-
-	NewSocket(socketType int) Socket
-	Terminate()
+  // TODO
+  // EmptyMessage() Message
+  // AllocMessage(size uintptr) Message
+  // BuildMessage(data []byte) Message
 }
+
+// Arguments to New Context
+type InitArgs struct {
+  AppThreads int
+  IoThreads  int
+  Flags      int
+}
+
+// Sensible default init args
+// AppThreads = EnvGOMAXPROCS(), IoThreads = 1, Flags = ZmqPoll
+func DefaultInitArgs() InitArgs {
+  return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 1, Flags: ZmqPoll}
+}
+
+// Context interface
+//
+// Contexts are global thread-safe objects
+type Context interface {
+  Closeable
+
+  NewSocket(socketType int) Socket
+  Terminate()
+}
+
+// Message interface
+//
+// Messages may only be used reliably with sockets from the same provider
+type Message interface {
+  Closeable
+
+  Size() uintptr
+
+  CopyTo(data []byte)
+  CopyFrom(data []byte)
+}
+
+// Socket interface
+type Socket interface {
+  Closeable
+
+  Bind(address string)
+  Connect(address string)
+
+  // TODO
+  // Receive(msg Message, flags int) bool
+  // Send(msg Message)
+  // Poll?
+}
+
+
+// ******** lzmq: Provider ********
+
+// libzmq provider impl
+func LibZmqProvider() Provider { return libZmqProvider(0) }
+
+type libZmqProvider byte
+
+
+// ******** lzmq: Context ********
 
 // libzmq context wrapper
 type lzmqContext uintptr
 
-// Arguments to zmq_init
-type InitArgs struct {
-	AppThreads 	int
-	IoThreads 	int
-	Flags				int
-}
-
-// Integer value of environment variable GOMAXPROCS if > 1, 1 otherwise
-func EnvGOMAXPROCS() int {
-	var maxProcs, error = strconv.Atoi(os.Getenv("GOMAXPROCS"))
-  if (error == nil && maxProcs > 1) {
-		return maxProcs
-	} 
-  return 1
-}
-// Sensible default init args
-// AppThreads = EnvGOMAXPROCS(), IoThreads = 1, Flags = ZmqPoll
-func DefaultInitArgs() InitArgs {  
-	return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 1, Flags: ZmqPoll}
-}
-                     
 // Creates a zmq context and returns it.
 //
 // Don't forget to set GOMAXPROCS appropriately when working with libzmq.
 //
-// Contexts are finalized by the GC unless they are manually destructed 
+// Contexts are finalized by the GC unless they are manually destructed
 // by calling Terminate() beforehand.  Applications need to arrange
 // that no socket is used or even closed after the owning context has
 // been destructed.  This requires to have at least one running go routine
 // with a live referene to the context.
-func InitLibZmqContext(args InitArgs) Context {
-	contextPtr := C.zmq_init(
-		C.int(args.AppThreads), 
-		C.int(args.IoThreads), 
-		C.int(args.Flags))
-                      
-  CondCatchError(contextPtr == nil, libZmqErrnoFun)	
+func (p libZmqProvider) NewContext(args InitArgs) Context {
+  contextPtr := C.zmq_init(
+    C.int(args.AppThreads),
+    C.int(args.IoThreads),
+    C.int(args.Flags))
 
-	lzmqContext := lzmqContext(contextPtr)
-	return lzmqContext
-}                                
+  CondCatchError(contextPtr == nil, libZmqErrnoFun)
+
+  lzmqContext := lzmqContext(contextPtr)
+  return lzmqContext
+}
 
 // Calls Terminate()
 func (p lzmqContext) Close() { p.Terminate() }
@@ -88,30 +124,77 @@ func (p lzmqContext) Close() { p.Terminate() }
 //
 // Only call once
 func (p lzmqContext) Terminate() {
-	ch  := make(chan interface{})
-	ptr := X.Pointer(p)
-	if (ptr != nil) {
-  	// Needs to run in separate go routine to safely lock the OS Thread
-  	// and synchronize via channel to know when we're done
-		Thunk(func () { 
-		  CondCatchError(int(C.zmq_term(ptr)) == -1, libZmqErrnoFun)
-	 	  ch <- nil
-		}).RunInOSThread()
+  ch := make(chan interface{})
+  ptr := X.Pointer(p)
+  if ptr != nil {
+    // Needs to run in separate go routine to safely lock the OS Thread
+    // and synchronize via channel to know when we're done
+    Thunk(func() {
+      CondCatchError(int(C.zmq_term(ptr)) == -1, libZmqErrnoFun)
+      ch <- nil
+    }).RunInOSThread()
     // Wait for completion
-	  <- ch
-	}
+    <-ch
+  }
 }
 
 
-// ******** Sockets ********
+// ******** lzmq: Messages ********
 
-// ZMQ Socket type
-type Socket interface{
-	Closeable
+// Additional Interface used for typechecking in lzmqSocket and
+// to acces the encapsulated pointer
+type lzmqSocketMessage interface {
+  Message
 
-	Bind(address string)
-	Connect(address string)
+  ptr() X.Pointer
 }
+
+// Exported in case you really want to stack-allocate one of those
+// when directly writing against lzmq instead of the generic interfaces
+type LzmqMessage C.zmq_msg_t
+
+func (p *LzmqMessage) Init() {
+  CondCatchError(C.zmq_msg_init((*_C_zmq_msg_t)(p)) == -1, libZmqErrnoFun)
+}
+
+func (p *LzmqMessage) Size() uintptr {
+  return uintptr(C.zmq_msg_size((*_C_zmq_msg_t)(p)))
+}
+
+func (p *LzmqMessage) CopyTo(data []byte) {
+  // TODO
+}
+
+func (p *LzmqMessage) CopyFrom(data []byte) {
+  // TODO
+}
+
+func (p *LzmqMessage) data() X.Pointer {
+  return C.zmq_msg_data((*_C_zmq_msg_t)(p))
+}
+
+func (p *LzmqMessage) ptr() X.Pointer {
+  return X.Pointer(p)
+}
+
+func (p *LzmqMessage) Close() {
+  CondCatchError(C.zmq_msg_close((*_C_zmq_msg_t)(p)) == -1, libZmqErrnoFun)
+}
+
+
+// ******** lzmq: Sockets ********
+
+func (p lzmqSocket) Receive(msg Message, flags int) bool {
+  var lzmqSMsg, err = msg.(lzmqSocketMessage)
+  if err {
+    panic(os.EINVAL)
+  } else {
+    lzmqSMsg.ptr()
+  }
+
+  return true
+}
+
 
 // libzmq socket wrapper
 type lzmqSocket uintptr
@@ -121,35 +204,34 @@ type lzmqSocket uintptr
 // Sockets only must be used from a fixed OSThread. This may be achieved
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) Socket {
-	ptr := X.Pointer(C.zmq_socket(X.Pointer(p), C.int(socketType)))
-	CondCatchError(ptr == nil, libZmqErrnoFun)
-	return lzmqSocket(ptr)
+  ptr := X.Pointer(C.zmq_socket(X.Pointer(p), C.int(socketType)))
+  CondCatchError(ptr == nil, libZmqErrnoFun)
+  return lzmqSocket(ptr)
 }
 
 // Bind server socket
 func (p lzmqSocket) Bind(address string) {
-	ptr    := X.Pointer(p)
+  ptr := X.Pointer(p)
   c_addr := C.CString(address)
-	defer C.free(X.Pointer(c_addr))
+  defer C.free(X.Pointer(c_addr))
   CondCatchError(C.zmq_bind(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
 // Connect client socket
 func (p lzmqSocket) Connect(address string) {
-	ptr    := X.Pointer(p)
+  ptr := X.Pointer(p)
   c_addr := C.CString(address)
-	defer C.free(X.Pointer(c_addr))
+  defer C.free(X.Pointer(c_addr))
   CondCatchError(C.zmq_connect(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
-// Closes this socket 
+// Closes this socket
 //
 // Expects the executing go routine to still be locked onto an OSThread.
-// May be called only once 
+// May be called only once
 func (p lzmqSocket) Close() {
-	CondCatchError(int(C.zmq_close(X.Pointer(p))) == -1, libZmqErrnoFun)
+  CondCatchError(int(C.zmq_close(X.Pointer(p))) == -1, libZmqErrnoFun)
 }
-
 
 
 // ******** LibZmq Error Handling *******
@@ -158,4 +240,3 @@ func (p lzmqSocket) Close() {
 func libZmqErrnoFun(errno os.Errno) os.Error { return errno }
 
 // {}
-
