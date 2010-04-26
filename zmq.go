@@ -1,12 +1,16 @@
 package zmq
 
+// import "fmt"
+import . "bytes"
+import "io"
+import "os"
+import X "unsafe"
+
 // #include <zmq.h>
 // #include <stdlib.h>
 // #include "get_errno.h"
 import "C"
 
-import X "unsafe"
-import "os"
 
 
 // ******** Global ZMQ Constants ********
@@ -20,6 +24,7 @@ const (
   ZmqRep        = C.ZMQ_REP
   ZmqUpstream   = C.ZMQ_UPSTREAM
   ZmqDownstream = C.ZMQ_DOWNSTREAM
+	ZmqNoBlock    = C.ZMQ_NOBLOCK
 )
 
 
@@ -27,11 +32,11 @@ const (
 
 type Provider interface {
   NewContext(initArgs InitArgs) Context
+  NewMessage() Message
+}
 
-  // TODO
-  // EmptyMessage() Message
-  // AllocMessage(size uintptr) Message
-  // BuildMessage(data []byte) Message
+type Provided interface {
+	Provider() Provider
 }
 
 // Arguments to New Context
@@ -49,9 +54,10 @@ func DefaultInitArgs() InitArgs {
 
 // Context interface
 //
-// Contexts are global thread-safe objects
+// Contexts are always global thread-safe objects
 type Context interface {
-  Closeable
+  io.Closer
+	Provided
 
   NewSocket(socketType int) Socket
   Terminate()
@@ -61,24 +67,32 @@ type Context interface {
 //
 // Messages may only be used reliably with sockets from the same provider
 type Message interface {
-  Closeable
+  io.Closer 
+	Provided
 
-  Size() uintptr
+	// Empty()
+	// Allocate(cap int)
 
-  CopyTo(data []byte)
-  CopyFrom(data []byte)
+	GetData(buf *Buffer) (n int, err os.Error)
+	SetData(buf *Buffer) (n int, err os.Error)
+	
+  Size() int
 }
 
 // Socket interface
+//
+// Sockets are typically thread-bound
 type Socket interface {
-  Closeable
+  io.Closer
+	Provided
 
   Bind(address string)
   Connect(address string)
 
+  Receive(msg Message, flags int) bool
+  Send(msg Message, flags int) bool
+
   // TODO
-  // Receive(msg Message, flags int) bool
-  // Send(msg Message)
   // Poll?
 }
 
@@ -86,9 +100,10 @@ type Socket interface {
 // ******** lzmq: Provider ********
 
 // libzmq provider impl
-func LibZmqProvider() Provider { return libZmqProvider(0) }
+func LibZmqProvider() Provider { return _libZmqProvider }
 
-type libZmqProvider byte
+type libZmqProvider struct {}
+var _libZmqProvider = new(libZmqProvider) 
 
 
 // ******** lzmq: Context ********
@@ -117,8 +132,19 @@ func (p libZmqProvider) NewContext(args InitArgs) Context {
   return lzmqContext
 }
 
+
+func (p *libZmqProvider) NewMessage() Message {
+	msg := new(lzmqMessage)
+	return msg
+}
+
+func (p lzmqContext) Provider() Provider { return LibZmqProvider() }
+
 // Calls Terminate()
-func (p lzmqContext) Close() { p.Terminate() }
+func (p lzmqContext) Close() (os.Error) { 
+	p.Terminate()
+	return nil
+}
 
 // Calls zmq_term on underlying context pointer
 //
@@ -141,60 +167,64 @@ func (p lzmqContext) Terminate() {
 
 // ******** lzmq: Messages ********
 
-// Additional Interface used for typechecking in lzmqSocket and
-// to acces the encapsulated pointer
-type lzmqSocketMessage interface {
-  Message
+type lzmqMessageHolder interface {
+	Message
 
-  ptr() X.Pointer
+  getLzmqMessage() *lzmqMessage
 }
 
-// Exported in case you really want to stack-allocate one of those
-// when directly writing against lzmq instead of the generic interfaces
-type LzmqMessage C.zmq_msg_t
+type lzmqMessage C.zmq_msg_t
 
-func (p *LzmqMessage) Init() {
-  CondCatchError(C.zmq_msg_init((*_C_zmq_msg_t)(p)) == -1, libZmqErrnoFun)
+func (p *lzmqMessage) empty() {
+  CondCatchError(C.zmq_msg_init(p.ptr()) == -1, libZmqErrnoFun)
 }
 
-func (p *LzmqMessage) Size() uintptr {
-  return uintptr(C.zmq_msg_size((*_C_zmq_msg_t)(p)))
+func (p *lzmqMessage) allocate(length int) {
+	sz := len2size(length)
+  CondCatchError(C.zmq_msg_init_size(p.ptr(), sz) == -1, libZmqErrnoFun)
 }
 
-func (p *LzmqMessage) CopyTo(data []byte) {
-  // TODO
+func (p *lzmqMessage) Provider() Provider { return LibZmqProvider() }
+
+func (p *lzmqMessage) Size() int {
+  return size2len(C.zmq_msg_size(p.ptr()))
 }
 
-func (p *LzmqMessage) CopyFrom(data []byte) {
-  // TODO
+func (p *lzmqMessage) GetData(buf *Buffer) (n int, err os.Error) {
+	sz := p.Size()
+	rd := ptrReader{ size: sz, ptr: p.data() }
+  var rn, rerr = buf.ReadFrom(&rd)
+	return int(rn), rerr
 }
 
-func (p *LzmqMessage) data() X.Pointer {
-  return C.zmq_msg_data((*_C_zmq_msg_t)(p))
+func (p *lzmqMessage) SetData(buf *Buffer) (n int, err os.Error) {
+	bytes := buf.Bytes()
+	n = len(bytes)
+	if (n <= 0) { return 0, os.EOF }
+	p.allocate(n)
+	C.memmove(p.data(), X.Pointer(&bytes[0]), len2size(n))
+	return n, nil
 }
 
-func (p *LzmqMessage) ptr() X.Pointer {
-  return X.Pointer(p)
+func (p *lzmqMessage) ptr() *C.zmq_msg_t {
+	return (*C.zmq_msg_t)(X.Pointer(p))
 }
 
-func (p *LzmqMessage) Close() {
-  CondCatchError(C.zmq_msg_close((*_C_zmq_msg_t)(p)) == -1, libZmqErrnoFun)
+func (p *lzmqMessage) data() X.Pointer {
+  return C.zmq_msg_data(p.ptr())
+}
+
+func (p *lzmqMessage) getLzmqMessage() *lzmqMessage {
+  return p
+}
+
+func (p *lzmqMessage) Close() os.Error {
+  if (C.zmq_msg_close(p.ptr()) == -1) { return FetchError(errno(), libZmqErrnoFun) }
+	return nil
 }
 
 
 // ******** lzmq: Sockets ********
-
-func (p lzmqSocket) Receive(msg Message, flags int) bool {
-  var lzmqSMsg, err = msg.(lzmqSocketMessage)
-  if err {
-    panic(os.EINVAL)
-  } else {
-    lzmqSMsg.ptr()
-  }
-
-  return true
-}
-
 
 // libzmq socket wrapper
 type lzmqSocket uintptr
@@ -208,6 +238,8 @@ func (p lzmqContext) NewSocket(socketType int) Socket {
   CondCatchError(ptr == nil, libZmqErrnoFun)
   return lzmqSocket(ptr)
 }
+
+func (p lzmqSocket) Provider() Provider { return LibZmqProvider() }
 
 // Bind server socket
 func (p lzmqSocket) Bind(address string) {
@@ -225,18 +257,59 @@ func (p lzmqSocket) Connect(address string) {
   CondCatchError(C.zmq_connect(ptr, c_addr) == -1, libZmqErrnoFun)
 }
 
+func (p lzmqSocket) Receive(msg Message, flags int) bool {
+  lzmqMsg := msg2lzmqMessage(msg)
+	lzmqMsg.empty()
+	ret := int(C.zmq_recv(X.Pointer(p), lzmqMsg.ptr(), C.int(flags)))
+	// fmt.Println("recv", msg)
+  return msgCheckErrno(ret, flags)
+}
+
+func (p lzmqSocket) Send(msg Message, flags int) bool {
+  lzmqMsg := msg2lzmqMessage(msg)
+	// fmt.Println("send", msg)
+	ret := int(C.zmq_send(X.Pointer(p), lzmqMsg.ptr(), C.int(flags)))
+  return msgCheckErrno(ret, flags)
+}
+
+func msg2lzmqMessage(msg Message) *lzmqMessage {
+  var lzmqMsgHolder, err = msg.(lzmqMessageHolder)
+  if !err { panic(os.EINVAL) } 
+	lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+	return lzmqMsg
+}
+
+func msgCheckErrno(ret int, flags int) bool {
+	if (ret == -1) {
+			c_errno := errno()
+			if ((flags & ZmqNoBlock != 0) && (c_errno == C.EAGAIN)) {
+				// Try again
+				return false
+			}
+			// Regular fail
+			CatchErrno(c_errno, libZmqErrnoFun)
+			// Unreachable
+			panic(os.EINVAL)
+	}
+	// Message was processed
+	return true
+}
+
 // Closes this socket
 //
 // Expects the executing go routine to still be locked onto an OSThread.
 // May be called only once
-func (p lzmqSocket) Close() {
-  CondCatchError(int(C.zmq_close(X.Pointer(p))) == -1, libZmqErrnoFun)
+func (p lzmqSocket) Close() os.Error {
+  if (int(C.zmq_close(X.Pointer(p))) == -1) { return FetchError(errno(), libZmqErrnoFun) }
+	return nil
 }
 
 
 // ******** LibZmq Error Handling *******
 
 // Default ErrnoFun used for libzmq syscalls
-func libZmqErrnoFun(errno os.Errno) os.Error { return errno }
+func libZmqErrnoFun(errno os.Errno) os.Error { 
+	return os.NewError(C.GoString(C.zmq_strerror(C.int(errno))))
+}
 
 // {}

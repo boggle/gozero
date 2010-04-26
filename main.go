@@ -1,43 +1,76 @@
 package main
 
+import "fmt"
 import . "zmq"
+import . "bytes"
 import rt "runtime"
 import "os"
-import "syscall"
-import "fmt"
 
-func Server(ctx Context, refc RefC, addr string) {
+func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
+  defer func(){ ch <- true }()
+
   rt.LockOSThread()
   defer rt.UnlockOSThread()
-  defer refc.Decr()
 
-  srv := ctx.NewSocket(ZmqRep)
+  srv := ctx.NewSocket(ZmqP2P)
   defer srv.Close()
 
-  fmt.Println("About to bind server socket on ", addr)
+  fmt.Println("server: About to bind server socket on ", addr)
   srv.Bind(addr)
-  fmt.Println("Bound.")
-  syscall.Sleep(10 * 1000 * 1000 * 1000)
+  bchan <- true
+  fmt.Println("server: Bound")
+
+	msg := srv.Provider().NewMessage()
+	buf := NewBuffer(make([]byte, 2))
+	defer msg.Close()
+
+	srv.Receive(msg, 0)
+	var _, err = msg.GetData(buf)	
+	if (err != nil) { fmt.Println(err) }
+	fmt.Println("server: Received '", buf.String(), "'")
+
+	srv.Receive(msg, 0)
+	buf.Reset()
+	_, err = msg.GetData(buf)	
+	if (err != nil) { fmt.Println(err) }
+	fmt.Println("server: Received '", buf.String(), "'")
 }
 
-func Client(ctx Context, refc RefC, addr string) {
+func Client(ctx Context, ch chan bool, addr string) {
+  defer func(){ ch <- true }()
+
   rt.LockOSThread()
   defer rt.UnlockOSThread()
-  defer refc.Decr()
 
-  cl := ctx.NewSocket(ZmqRep)
+  cl := ctx.NewSocket(ZmqP2P)
   defer cl.Close()
 
-  fmt.Println("About to connect client socket on ", addr)
+  fmt.Println("client: About to connect client socket on ", addr)
   cl.Connect(addr)
-  fmt.Println("Connected.")
-  syscall.Sleep(10 * 1000 * 1000 * 1000)
+  fmt.Println("client: Connected")
+
+	buf := NewBufferString("!PING!PING!PING!")
+	msg := cl.Provider().NewMessage()
+	defer msg.Close()
+
+	var _, err = msg.SetData(buf)
+	if (err != nil) { fmt.Println("client: ", err) }
+	fmt.Println("client: Sending '", buf.String(), "'")
+	cl.Send(msg, 0)
+
+	buf.Reset()
+	buf.WriteString("XXX")
+	 _, err = msg.SetData(buf)
+	if (err != nil) { fmt.Println("client: ", err) }
+	fmt.Println("client: Sending '", buf.String(), "'")
+	cl.Send(msg, 0)
 }
 
 func main() {
-  ctx := LibZmqProvider().NewContext(DefaultInitArgs())
+  ctx   := LibZmqProvider().NewContext(DefaultInitArgs())
   defer ctx.Close()
-  var refc, synch = SyncOnClose(ctx, 2)
+	ch    := make(chan bool)
+	bchan := make(chan bool)
 
   if len(os.Args) != 3 {
     fmt.Println(os.Args[0], "srv|cl|all addr")
@@ -47,16 +80,17 @@ func main() {
     addr := os.Args[2]
     switch {
     case mode == "srv":
-      go Server(ctx, refc, addr)
-      refc.Decr()
+      Server(ctx, ch, bchan, addr)
+			<- bchan
     case mode == "cl":
-      go Client(ctx, refc, addr)
-      refc.Decr()
+      Client(ctx, ch, addr)
     case mode == "all":
-      go Server(ctx, refc, addr)
-      go Client(ctx, refc, addr)
+      go Server(ctx, ch, bchan, addr)
+			<- bchan
+      go Client(ctx, ch, addr)
+	    <- ch
     }
     fmt.Println("main: Waiting to finish")
-    <-synch
+    <- ch
   }
 }

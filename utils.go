@@ -2,8 +2,8 @@ package zmq
 
 import "os"
 import rt "runtime"
-import "sync"
 import "strconv"
+import X "unsafe"
 
 // #include "get_errno.c"
 import "C"
@@ -39,87 +39,6 @@ func (p Thunk) Syncing(ch chan interface{}, msg interface{}) Thunk {
   })
 }
 
-// Reference counter interface
-type RefC interface {
-  Incr()
-  Decr()
-}
-
-// Sample RefC implementation
-type refC struct {
-  lock  sync.Mutex
-  count uint32
-  thunk Thunk
-}
-
-var ErrRefC = os.NewError("RefC exhausted")
-
-// Create new reference counter that will call thunk when done
-// (Instantly spawns a goroutine with thunk)
-func (p Thunk) RefC(initialCount uint32) RefC {
-  if initialCount == 0 {
-    // Somewhat pointless yet valid
-    ret := &refC{count: 0, thunk: nil}
-    go p()
-    return ret
-  }
-  return &refC{count: initialCount, thunk: p}
-}
-
-
-// Increment RefC, panic if already 0
-func (p *refC) Incr() {
-  p.lock.Lock()
-  defer p.lock.Unlock()
-
-  if p.count == 0 {
-    panic(ErrRefC)
-  }
-  p.count++
-}
-
-// Decrement RefC, calling thunk if 0 is reached.
-// Panics if already at 0.
-func (p *refC) Decr() {
-  p.lock.Lock()
-  defer p.lock.Unlock()
-
-  switch p.count {
-  case 0:
-    panic(ErrRefC)
-  case 1:
-    thunk := p.thunk
-    p.thunk = nil
-    p.count = 0
-    go thunk()
-  default:
-    p.count--
-  }
-}
-
-// Create new reference counter that will call thunk when done,
-// followed by sending p over chan
-// (Instantly spawns a goroutine with thunk)
-func (p Thunk) SyncingRefC(initialCount uint32, ch chan interface{}, msg interface{}) RefC {
-  return (p.Syncing(ch, msg)).RefC(initialCount)
-}
-
-
-// ******** Closeable ********
-
-// Interface for all artefacts that initially are open and later
-// may be closed/terminated
-type Closeable interface {
-  Close()
-}
-
-// Returns RefC that triggers closeable.Close and channel that will
-// deliver closeable value afer the RefC went down to 0
-func SyncOnClose(c Closeable, initCount uint32) (refc RefC, ch chan interface{}) {
-  ch = make(chan interface{})
-  refc = Thunk(func() { c.Close() }).SyncingRefC(initCount, ch, c)
-  return
-}
 
 
 // ******** Configuration ********
@@ -162,7 +81,12 @@ func CondCatchError(cond bool, errnoFun ErrnoFun) {
 // Gets errno from C and converts it into an os.Error using errnoFun.
 // Requires that the executing go routine has been locked to an OSThread.
 func CatchError(errnoFun ErrnoFun) {
-  c_errno := errno()
+	CatchErrno(errno(), errnoFun)	
+}
+
+// Converts c_errno into an os.Error using errnoFun.
+// Requires that the executing go routine has been locked to an OSThread.
+func CatchErrno(c_errno os.Errno, errnoFun ErrnoFun) {
   if c_errno != os.Errno(0) {
     error := errnoFun(c_errno)
     if error == nil {
@@ -172,5 +96,50 @@ func CatchError(errnoFun ErrnoFun) {
     }
   }
 }
+
+// Converts c_errno into an os.Error using errnoFun.
+// Requires that the executing go routine has been locked to an OSThread.
+func FetchError(c_errno os.Errno, errnoFun ErrnoFun) os.Error {
+		if (c_errno == 0) { return nil }
+
+    error := errnoFun(c_errno)
+    if error == nil {
+      return os.Error(c_errno)
+    }
+    return error
+}
+
+
+// ******** cgo interaction ********
+
+// Transplants Reader interface on *byte
+type ptrReader struct { 
+	seek int
+	size int
+	ptr  X.Pointer
+}
+
+func (p *ptrReader) Read(dst []uint8) (n int, err os.Error) {
+	dstCap := len(dst)
+	if (dstCap <= 0) { return 0, os.EINVAL }
+  avail  := p.size - p.seek
+	if (avail <= 0) { return 0, os.EOF }
+  n = avail
+  if (n > dstCap) { n = dstCap }
+	C.memmove(X.Pointer(&dst[0]), X.Pointer(uintptr(p.ptr) + uintptr(p.seek)), len2size(n))
+	p.seek = p.seek + n
+	avail = avail - n
+	if (avail > 0) { return n, nil }
+	return n, os.EOF
+}
+
+// Simple converters between size_t (used by C) and int (bytecount used by Go)
+
+func len2size(length int) C.size_t { 
+	if (length < 0) { panic(os.EINVAL) }
+	return C.size_t(length) 
+}
+
+func size2len(sz C.size_t) int { return int(sz) }
 
 // {}
