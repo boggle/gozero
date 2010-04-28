@@ -3,7 +3,6 @@ package zmq
 import "os"
 import rt "runtime"
 import "strconv"
-import X "unsafe"
 
 // #include "get_errno.c"
 import "C"
@@ -38,7 +37,6 @@ func (p Thunk) Syncing(ch chan interface{}, msg interface{}) Thunk {
     p()
   })
 }
-
 
 
 // ******** Configuration ********
@@ -81,7 +79,7 @@ func CondCatchError(cond bool, errnoFun ErrnoFun) {
 // Gets errno from C and converts it into an os.Error using errnoFun.
 // Requires that the executing go routine has been locked to an OSThread.
 func CatchError(errnoFun ErrnoFun) {
-	CatchErrno(errno(), errnoFun)	
+  CatchErrno(errno(), errnoFun)
 }
 
 // Converts c_errno into an os.Error using errnoFun.
@@ -100,46 +98,13 @@ func CatchErrno(c_errno os.Errno, errnoFun ErrnoFun) {
 // Converts c_errno into an os.Error using errnoFun.
 // Requires that the executing go routine has been locked to an OSThread.
 func FetchError(c_errno os.Errno, errnoFun ErrnoFun) os.Error {
-		if (c_errno == 0) { return nil }
+  if c_errno == 0 {
+    return nil
+  }
 
-    error := errnoFun(c_errno)
-    if error == nil {
-      return os.Error(c_errno)
-    }
-    return error
+  error := errnoFun(c_errno)
+  if error == nil {
+    return os.Error(c_errno)
+  }
+  return error
 }
-
-
-// ******** cgo interaction ********
-
-// Transplants Reader interface on *byte
-type ptrReader struct { 
-	seek int
-	size int
-	ptr  X.Pointer
-}
-
-func (p *ptrReader) Read(dst []uint8) (n int, err os.Error) {
-	dstCap := len(dst)
-	if (dstCap <= 0) { return 0, os.EINVAL }
-  avail  := p.size - p.seek
-	if (avail <= 0) { return 0, os.EOF }
-  n = avail
-  if (n > dstCap) { n = dstCap }
-	C.memmove(X.Pointer(&dst[0]), X.Pointer(uintptr(p.ptr) + uintptr(p.seek)), len2size(n))
-	p.seek = p.seek + n
-	avail = avail - n
-	if (avail > 0) { return n, nil }
-	return n, os.EOF
-}
-
-// Simple converters between size_t (used by C) and int (bytecount used by Go)
-
-func len2size(length int) C.size_t { 
-	if (length < 0) { panic(os.EINVAL) }
-	return C.size_t(length) 
-}
-
-func size2len(sz C.size_t) int { return int(sz) }
-
-// {}
