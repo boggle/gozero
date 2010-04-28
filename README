@@ -19,3 +19,37 @@ socket per UNIX process, so you can use tcp between go processes but
 not inside a single go process.  Bugs abound.  Wouldnt mind anyone 
 picking this up. Thanks!
 
+Install: make clean install
+Main: make main
+
+Run
+
+./main cl|srv|all addr
+
+cl  - client
+srv - server
+all - both
+
+Currently works:
+
+./main all inproc://foo
+
+./main srv tcp://127.0.0.1:5555
+./main cl tcp://127.0.0.1:5555
+
+Broken:
+
+./main all tcp://127.0.0.1:5555
+
+Server never receives
+
+./main all ipc:///tmp/foo
+./main src ipc:///tmp/foo
+./main cl ipc:///tmp/foo
+
+Server never receives
+
+Same code, should all do, but doesn't
+Something weird is likely happening between zmq and the go runtime
+
+
