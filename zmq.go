@@ -47,9 +47,9 @@ type InitArgs struct {
 }
 
 // Sensible default init args
-// AppThreads = EnvGOMAXPROCS(), IoThreads = 1, Flags = ZmqPoll
+// AppThreads = EnvGOMAXPROCS(), IoThreads = 2, Flags = ZmqPoll
 func DefaultInitArgs() InitArgs {
-  return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 1, Flags: ZmqPoll}
+  return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 2, Flags: ZmqPoll}
 }
 
 // Context interface

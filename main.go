@@ -77,8 +77,6 @@ func Client(ctx Context, ch chan bool, addr string) {
 func main() {
   ctx := LibZmqProvider().NewContext(DefaultInitArgs())
   defer ctx.Close()
-  ctx2 := LibZmqProvider().NewContext(DefaultInitArgs())
-  defer ctx2.Close()
 
   ch := make(chan bool)
   bchan := make(chan bool)
@@ -100,7 +98,7 @@ func main() {
     case mode == "cl":
       go Client(ctx, ch, addr)
     case mode == "all":
-      go Server(ctx2, ch, bchan, addr)
+      go Server(ctx, ch, bchan, addr)
       <-bchan
       go Client(ctx, ch, addr)
       <-ch
