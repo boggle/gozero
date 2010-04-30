@@ -8,62 +8,67 @@ import "os"
 // import "syscall"
 
 func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
-  defer func() { ch <- true }()
-
   rt.LockOSThread()
   defer rt.UnlockOSThread()
 
-  srv := ctx.NewSocket(ZmqP2P)
-  defer srv.Close()
+  defer func() { ch <- true }()
 
-  fmt.Println("server: About to bind server socket on ", addr)
-  srv.Bind(addr)
-  bchan <- true
-  fmt.Println("server: Bound")
+  srv, err := ctx.NewSocket(ZmqP2P)
+  OkIf(err != nil, err)
+  defer srv.Close()
 
   msg := srv.Provider().NewMessage()
   buf := NewBuffer(make([]byte, 2))
   defer msg.Close()
 
-  srv.Receive(msg, 0)
-  var _, err = msg.GetData(buf)
-  if err != nil {
-    fmt.Println("server: Error: ", err)
-  }
-  fmt.Printf("server: Received '%v'\n", buf)
+  fmt.Println("server: About to bind server socket on ", addr)
+  err = srv.Bind(addr)
+  OkIf(err != nil, err)
+  bchan <- true
+  fmt.Println("server: Bound")
 
-  srv.Receive(msg, 0)
-  buf.Reset()
+  MayPanic(srv.Receive(msg, 0))
   _, err = msg.GetData(buf)
   if err != nil {
     fmt.Println("server: Error: ", err)
   }
   fmt.Printf("server: Received '%v'\n", buf)
+
+  buf.Reset()
+  MayPanic(srv.Receive(msg, 0))
+  _, err = msg.GetData(buf)
+  if err != nil {
+    fmt.Println("server: Error: ", err)
+  }
+
+  fmt.Printf("server: Received '%v'\n", buf)
 }
 
 func Client(ctx Context, ch chan bool, addr string) {
-  defer func() { ch <- true }()
-
   rt.LockOSThread()
   defer rt.UnlockOSThread()
 
-  cl := ctx.NewSocket(ZmqP2P)
-  defer cl.Close()
+  defer func() { ch <- true }()
 
-  fmt.Println("client: About to connect client socket on ", addr)
-  cl.Connect(addr)
-  fmt.Println("client: Connected")
+  cl, err := ctx.NewSocket(ZmqP2P)
+  OkIf(err != nil, err)
+  defer cl.Close()
 
   buf := NewBufferString("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   msg := cl.Provider().NewMessage()
   defer msg.Close()
 
+  fmt.Println("client: About to connect client socket on ", addr)
+  err = cl.Connect(addr)
+  OkIf(err != nil, err)
+  fmt.Println("client: Connected")
+
   fmt.Printf("client: Sending '%v'\n", buf.String())
-  var _, err = msg.SetData(buf)
+  _, err = msg.SetData(buf)
   if err != nil {
     fmt.Println("client: Error: ", err)
   }
-  cl.Send(msg, 0)
+  MayPanic(cl.Send(msg, 0))
 
   buf.WriteString("XXX")
   fmt.Printf("client: Sending '%v'\n", buf.String())
@@ -71,11 +76,19 @@ func Client(ctx Context, ch chan bool, addr string) {
   if err != nil {
     fmt.Println("client: Error: ", err)
   }
-  cl.Send(msg, 0)
+  MayPanic(cl.Send(msg, 0))
+
+	// Give messages some time to actually get sent
+	// (If you forget this and defer close the socket,
+  // your message might not be transmitted at all)
+  fmt.Printf("client: Waiting for zmq to deliver\n", buf.String())
+	cl.Provider().Sleep(2)
 }
 
 func main() {
-  ctx := LibZmqProvider().NewContext(DefaultInitArgs())
+  prov := LibZmqProvider()
+  ctx, err := prov.NewContext(DefaultInitArgs())
+  OkIf(err != nil, err)
   defer ctx.Close()
 
   ch := make(chan bool)

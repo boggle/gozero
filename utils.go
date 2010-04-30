@@ -53,58 +53,52 @@ func EnvGOMAXPROCS() int {
 
 // ******** Error Handling ********
 
-// Panics with error if cond is true
-func CondPanic(cond bool, error os.Error) {
+type ErrKnow interface {
+  GetError() os.Error
+
+  OkIf(cond bool) os.Error
+  ErrorIf(cond bool) os.Error
+}
+
+
+type ZmqErrno int
+
+func (p ZmqErrno) String() string {
+	return C.GoString(C.zmq_strerror(C.int(p)))
+}
+
+func (p ZmqErrno) IsA(err os.Errno) bool {
+	return int64(p) == int64(err)
+}
+
+func (p *libZmqProvider) GetError() os.Error {
+  return ZmqErrno(C.zmq_errno())
+}
+
+func (p *libZmqProvider) OkIf(cond bool) os.Error { return p.ErrorIf(!cond) }
+
+func (p *libZmqProvider) ErrorIf(cond bool) os.Error {
   if cond {
-    panic(error)
-  }
-}
-
-// Deliver current errno from C.
-// For this to work reliably, you must lock the executing goroutine to the
-// underlying OSThread, i.e. by using GoThread!
-func errno() os.Errno { return os.Errno(uint64(C.get_errno())) }
-
-// Type of Errno() to os.Error conversion functions
-type ErrnoFun func(os.Errno) os.Error
-
-// Calls CatchError(errnoFun) iff cond is true.
-// Requires that the executing go routine has been locked to an OSThread.
-func CondCatchError(cond bool, errnoFun ErrnoFun) {
-  if cond {
-    CatchError(errnoFun)
-  }
-}
-
-// Gets errno from C and converts it into an os.Error using errnoFun.
-// Requires that the executing go routine has been locked to an OSThread.
-func CatchError(errnoFun ErrnoFun) {
-  CatchErrno(errno(), errnoFun)
-}
-
-// Converts c_errno into an os.Error using errnoFun.
-// Requires that the executing go routine has been locked to an OSThread.
-func CatchErrno(c_errno os.Errno, errnoFun ErrnoFun) {
-  if c_errno != os.Errno(0) {
-    error := errnoFun(c_errno)
-    if error == nil {
-      panic(os.Error(c_errno))
-    } else {
-      panic(error)
+    err := p.GetError()
+    if err != nil {
+      return err
     }
   }
+  return nil
 }
 
-// Converts c_errno into an os.Error using errnoFun.
-// Requires that the executing go routine has been locked to an OSThread.
-func FetchError(c_errno os.Errno, errnoFun ErrnoFun) os.Error {
-  if c_errno == 0 {
+func OkIf(cond bool, error os.Error) os.Error { return ErrorIf(!cond, error) }
+
+func ErrorIf(cond bool, error os.Error) os.Error {
+  if cond {
+    return error
+  }
+  return nil
+}
+
+func MayPanic(err os.Error) os.Error {
+  if err == nil {
     return nil
   }
-
-  error := errnoFun(c_errno)
-  if error == nil {
-    return os.Error(c_errno)
-  }
-  return error
+  panic(err)
 }
