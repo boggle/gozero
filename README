@@ -5,13 +5,15 @@ gozero
 
 ZMQ bindings for Go.
 
-This is a very early attempt at libzmq bindings to the Go language.
-
-To setup, you first need to install github.com/boggle/coffer
-which is a small package for copying memory between C and go.
+These are EXPERIMENTAL libzmq bindings for the the Go language.
 
 Basic contexts, sockets, and messages have been implemented along
 with Send, and Receive.  No Poll, no setSocketOpts at this time.
+
+To setup, you first need to install 
+
+github.com/boggle/coffer (for copying memory between C and go)
+github.com/boggle/gonewrong (for error handling)
 
 Install: make clean install
 Main: make clsrv

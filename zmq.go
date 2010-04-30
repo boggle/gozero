@@ -5,7 +5,9 @@ import . "bytes"
 import "io"
 import "os"
 import "unsafe"
+import "strconv"
 import . "unsafe/coffer"
+import . "gonewrong"
 
 // #include <zmq.h>
 // #include <stdlib.h>
@@ -79,6 +81,16 @@ type InitArgs struct {
 func DefaultInitArgs() InitArgs {
   return InitArgs{AppThreads: EnvGOMAXPROCS(), IoThreads: 2, Flags: 0}
 }
+
+// Integer value of environment variable GOMAXPROCS if > 1, 1 otherwise
+func EnvGOMAXPROCS() int {
+  var maxProcs, error = strconv.Atoi(os.Getenv("GOMAXPROCS"))
+  if error == nil && maxProcs > 1 {
+    return maxProcs
+  }
+  return 1
+}
+
 
 // Context interface
 //
@@ -157,7 +169,7 @@ func (p libZmqProvider) NewContext(args InitArgs) (Context, os.Error) {
     C.int(args.IoThreads),
     C.int(args.Flags))
 
-  if isNull(contextPtr) {
+  if IsCNullPtr(contextPtr) {
     return nil, p.GetError()
   }
 
@@ -170,6 +182,28 @@ func (p *libZmqProvider) NewMessage() Message {
   return msg
 }
 
+// Type of error codes used by LibZmq
+//
+// Necessary since lzmq provides its own zmq_errno, zmq_strerror functions
+type LibZmqErrno int
+
+func (p LibZmqErrno) String() string { return C.GoString(C.zmq_strerror(C.int(p))) }
+
+func (p *libZmqProvider) GetError() os.Error {
+  return LibZmqErrno(C.zmq_errno())
+}
+
+func (p *libZmqProvider) OkIf(cond bool) os.Error { return p.ErrorIf(!cond) }
+
+func (p *libZmqProvider) ErrorIf(cond bool) os.Error {
+  if cond {
+    err := p.GetError()
+    if err != nil {
+      return err
+    }
+  }
+  return nil
+}
 func (p *libZmqProvider) Sleep(secs int) {
   if secs < 0 {
     return
@@ -306,7 +340,7 @@ type lzmqSocket uintptr
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) (Socket, os.Error) {
   ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
-  if isNull(ptr) {
+  if IsCNullPtr(ptr) {
     return nil, p.Provider().GetError()
   }
   return lzmqSocket(ptr), nil
@@ -374,9 +408,5 @@ func (p lzmqSocket) Close() os.Error {
   return p.Provider().OkIf(C.zmq_close(unsafe.Pointer(p)) == 0)
 }
 
-
-func isNull(ptr unsafe.Pointer) bool {
-	return uintptr(ptr) == uintptr(0)
-}
 
 // {}
