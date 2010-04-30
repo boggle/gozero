@@ -7,8 +7,10 @@ ZMQ bindings for Go.
 
 These are EXPERIMENTAL libzmq bindings for the the Go language.
 
-Basic contexts, sockets, and messages have been implemented along
+Contexts, sockets, and messages have been implemented along
 with Send, and Receive.  No Poll, no setSocketOpts at this time.
+There is a simple client server test program, no coverage or testing
+beyond that has been done so far.
 
 To setup, you first need to install 
 

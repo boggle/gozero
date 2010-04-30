@@ -1,4 +1,6 @@
-- Implement missing methods: Watch, Poll, Msg, etc.
+- Implement missing methods: Poll
+
+- Get some test coverage by implementing the tutorial stuff from zeromq.org
 
 - LL interface: Here for maximal performance...
 - Reduce footshooting chance by moving from *foo **foo and nil on Close()
@@ -10,5 +12,9 @@
      control channel)
   - PushForwarder
   - PullForwarder
+	- Channel registry
   - Helpers for encoding native go format and protobuf?
   - Still wish I knew how to cast []byte into a unsafe.Pointer
+
+- I really need to think about leaks, esp concerning setsockopt and watches, its not totally clear
+  who frees what when

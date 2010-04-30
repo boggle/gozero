@@ -58,7 +58,7 @@ type Provider interface {
   NewContext(initArgs InitArgs) (Context, os.Error)
   NewMessage() Message
 
-  // TODO Watch NewWatch()
+  StartWatch() Watch
 
   Version() (major int, minor int, pl int)
 
@@ -110,12 +110,14 @@ type Message interface {
   io.Closer
   Provided
 
-  GetData(buf *Buffer) (n int, err os.Error)
-  SetData(buf *Buffer) (n int, err os.Error)
+  WriteTo(buf *Buffer) (n int, err os.Error)
+  ReadFrom(buf *Buffer) (n int, err os.Error)
 
-  // TODO Move(msg Message)
-  // TODO Copy(msg Message)
-  // TODO AliasData
+	// GetData(coffer Coffer) os.Error
+	// SetData(coffer Coffer) os.Error
+
+  MoveTo(msg Message) os.Error
+  CopyTo(msg Message) os.Error
 
   Size() int
 }
@@ -137,6 +139,12 @@ type Socket interface {
 
   Flush() os.Error
 }
+
+// Watch interface
+type Watch interface {
+	Stop() uint64
+}
+
 
 
 // ******** lzmq: Provider ********
@@ -169,7 +177,7 @@ func (p libZmqProvider) NewContext(args InitArgs) (Context, os.Error) {
     C.int(args.IoThreads),
     C.int(args.Flags))
 
-  if IsCNullPtr(contextPtr) {
+  if IsCNullPtr(uintptr(contextPtr)) {
     return nil, p.GetError()
   }
 
@@ -180,6 +188,11 @@ func (p libZmqProvider) NewContext(args InitArgs) (Context, os.Error) {
 func (p *libZmqProvider) NewMessage() Message {
   msg := new(lzmqMessage)
   return msg
+}
+
+func (p *libZmqProvider) StartWatch() Watch {
+	watch := uintptr(C.zmq_stopwatch_start())
+	return lzmqWatch(watch)
 }
 
 // Type of error codes used by LibZmq
@@ -267,14 +280,40 @@ func (p *lzmqMessage) Size() int {
   return int(C.zmq_msg_size(p.ptr()))
 }
 
-func (p *lzmqMessage) GetData(buf *Buffer) (n int, err os.Error) {
+func (p *lzmqMessage) MoveTo(msg Message) os.Error {
+  if msg == nil {
+    return os.EINVAL
+  }
+  lzmqMsgHolder, err := msg.(lzmqMessageHolder)
+  if err == false {
+    return os.EINVAL
+  }
+  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+
+	return p.Provider().OkIf(C.zmq_msg_move(lzmqMsg.ptr(), p.ptr()) == 0)
+}
+
+func (p *lzmqMessage) CopyTo(msg Message) os.Error {
+  if msg == nil {
+    return os.EINVAL
+  }
+  lzmqMsgHolder, err := msg.(lzmqMessageHolder)
+  if err == false {
+    return os.EINVAL
+  }
+  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+
+	return p.Provider().OkIf(C.zmq_msg_copy(lzmqMsg.ptr(), p.ptr()) == 0)
+}
+
+func (p *lzmqMessage) WriteTo(buf *Buffer) (n int, err os.Error) {
   n = p.Size()
   if n <= 0 {
     return 0, nil
   }
   start := p.data()
-  var coffr *Coffer
-  coffr, err = NewCoffer(start, n)
+  var coffr Coffer
+  coffr, err = NewPtrCoffer(start, n)
   if err != nil {
     return 0, err
   }
@@ -287,7 +326,7 @@ func (p *lzmqMessage) GetData(buf *Buffer) (n int, err os.Error) {
   return int(n64), err
 }
 
-func (p *lzmqMessage) SetData(buf *Buffer) (n int, err os.Error) {
+func (p *lzmqMessage) ReadFrom(buf *Buffer) (n int, err os.Error) {
   n = buf.Len()
   if n <= 0 {
     return 0, nil
@@ -298,8 +337,8 @@ func (p *lzmqMessage) SetData(buf *Buffer) (n int, err os.Error) {
   }
 
   start := p.data()
-  var coffr *Coffer
-  coffr, err = NewCoffer(start, n)
+  var coffr Coffer
+  coffr, err = NewPtrCoffer(start, n)
   if err != nil {
     return 0, err
   }
@@ -340,7 +379,7 @@ type lzmqSocket uintptr
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) (Socket, os.Error) {
   ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
-  if IsCNullPtr(ptr) {
+  if IsCNullPtr(uintptr(ptr)) {
     return nil, p.Provider().GetError()
   }
   return lzmqSocket(ptr), nil
@@ -408,5 +447,13 @@ func (p lzmqSocket) Close() os.Error {
   return p.Provider().OkIf(C.zmq_close(unsafe.Pointer(p)) == 0)
 }
 
+
+// ******** Watches ********
+
+type lzmqWatch uintptr
+
+func (p lzmqWatch) Stop() uint64 {
+	return uint64(C.zmq_stopwatch_stop(unsafe.Pointer(p)))
+}
 
 // {}

@@ -3,6 +3,7 @@ package main
 import "fmt"
 import . "zmq"
 import . "bytes"
+import . "gonewrong"
 import rt "runtime"
 import "os"
 import "strconv"
@@ -28,7 +29,7 @@ func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
   fmt.Println("server: Bound")
 
   MayPanic(srv.Receive(msg, 0))
-  _, err = msg.GetData(buf)
+  _, err = msg.WriteTo(buf)
   if err != nil {
     fmt.Println("server: Error: ", err)
   }
@@ -36,7 +37,7 @@ func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
 
   buf.Reset()
   MayPanic(srv.Receive(msg, 0))
-  _, err = msg.GetData(buf)
+  _, err = msg.WriteTo(buf)
   if err != nil {
     fmt.Println("server: Error: ", err)
   }
@@ -64,7 +65,7 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
   fmt.Println("client: Connected")
 
   fmt.Printf("client: Sending '%v'\n", buf.String())
-  _, err = msg.SetData(buf)
+  _, err = msg.ReadFrom(buf)
   if err != nil {
     fmt.Println("client: Error: ", err)
   }
@@ -72,7 +73,7 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
 
   buf.WriteString("XXX")
   fmt.Printf("client: Sending '%v'\n", buf.String())
-  _, err = msg.SetData(buf)
+  _, err = msg.ReadFrom(buf)
   if err != nil {
     fmt.Println("client: Error: ", err)
   }
