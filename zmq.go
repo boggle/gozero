@@ -1,6 +1,6 @@
 package zmq
 
-import "fmt"
+// import "fmt"
 import . "bytes"
 import "io"
 import "os"
@@ -9,7 +9,6 @@ import . "unsafe/coffer"
 
 // #include <zmq.h>
 // #include <stdlib.h>
-// int is_null(void* ptr) { if (ptr == NULL) return 1; return 0; }
 import "C"
 
 
@@ -145,7 +144,7 @@ type lzmqContext uintptr
 
 // Creates a zmq context and returns it.
 //
-// Don't forget to set GOMAunsafe.ROCS appropriately when working with libzmq.
+// Don't forget to set EnvGOMAXPROCS appropriately when working with libzmq
 //
 // Contexts are finalized by the GC unless they are manually destructed
 // by calling Terminate() beforehand.  Applications need to arrange
@@ -158,7 +157,7 @@ func (p libZmqProvider) NewContext(args InitArgs) (Context, os.Error) {
     C.int(args.IoThreads),
     C.int(args.Flags))
 
-  if contextPtr == nil {
+  if isNull(contextPtr) {
     return nil, p.GetError()
   }
 
@@ -307,7 +306,7 @@ type lzmqSocket uintptr
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) (Socket, os.Error) {
   ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
-  if ptr == nil {
+  if isNull(ptr) {
     return nil, p.Provider().GetError()
   }
   return lzmqSocket(ptr), nil
@@ -345,7 +344,7 @@ func (p lzmqSocket) Receive(msg Message, flags int) os.Error {
     return err
   }
   ret := p.Provider().OkIf(C.zmq_recv(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
-  fmt.Println("recv", msg)
+  // fmt.Println("recv", msg)
   return ret
 }
 
@@ -359,7 +358,7 @@ func (p lzmqSocket) Send(msg Message, flags int) os.Error {
   }
   lzmqMsg := lzmqMsgHolder.getLzmqMessage()
   ret := p.Provider().OkIf(C.zmq_send(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
-  fmt.Println("sent", msg)
+  // fmt.Println("sent", msg)
   return ret
 }
 
@@ -377,7 +376,7 @@ func (p lzmqSocket) Close() os.Error {
 
 
 func isNull(ptr unsafe.Pointer) bool {
-	return int(C.is_null(ptr)) == 0
+	return uintptr(ptr) == uintptr(0)
 }
 
 // {}

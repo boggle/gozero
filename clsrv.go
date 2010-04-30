@@ -23,7 +23,7 @@ func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
 
   fmt.Println("server: About to bind server socket on ", addr)
   err = srv.Bind(addr)
-  OkIf(err != nil, err)
+  MayPanic(OkIf(err == nil, err))
   bchan <- true
   fmt.Println("server: Bound")
 
@@ -60,7 +60,7 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
 
   fmt.Println("client: About to connect client socket on ", addr)
   err = cl.Connect(addr)
-  OkIf(err != nil, err)
+  MayPanic(OkIf(err == nil, err))
   fmt.Println("client: Connected")
 
   fmt.Printf("client: Sending '%v'\n", buf.String())
@@ -81,7 +81,7 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
   // Give messages some time to actually get sent
   // (If you forget this and defer close the socket,
   // your message might not be transmitted at all)
-  fmt.Printf("client: Waiting for zmq to deliver\n", buf.String())
+  fmt.Printf("client: Waiting for zmq to deliver\n")
   cl.Provider().Sleep(tout)
 }
 
