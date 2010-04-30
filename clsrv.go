@@ -5,7 +5,7 @@ import . "zmq"
 import . "bytes"
 import rt "runtime"
 import "os"
-// import "syscall"
+import "strconv"
 
 func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
   rt.LockOSThread()
@@ -44,7 +44,7 @@ func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
   fmt.Printf("server: Received '%v'\n", buf)
 }
 
-func Client(ctx Context, ch chan bool, addr string) {
+func Client(ctx Context, ch chan bool, tout int, addr string) {
   rt.LockOSThread()
   defer rt.UnlockOSThread()
 
@@ -78,11 +78,11 @@ func Client(ctx Context, ch chan bool, addr string) {
   }
   MayPanic(cl.Send(msg, 0))
 
-	// Give messages some time to actually get sent
-	// (If you forget this and defer close the socket,
+  // Give messages some time to actually get sent
+  // (If you forget this and defer close the socket,
   // your message might not be transmitted at all)
   fmt.Printf("client: Waiting for zmq to deliver\n", buf.String())
-	cl.Provider().Sleep(2)
+  cl.Provider().Sleep(tout)
 }
 
 func main() {
@@ -94,12 +94,14 @@ func main() {
   ch := make(chan bool)
   bchan := make(chan bool)
 
-  if len(os.Args) != 3 {
-    fmt.Println(os.Args[0], "srv|cl|all addr")
+  if len(os.Args) != 4 {
+    fmt.Println(os.Args[0], "srv|cl|all cl-timeout(ignored if srv) zmqaddr")
     os.Exit(1)
   } else {
     mode := os.Args[1]
-    addr := os.Args[2]
+    tout, err := strconv.Atoi(os.Args[2])
+    MayPanic(err)
+    addr := os.Args[3]
     switch {
     default:
       fmt.Println(os.Args[0], "srv|cl|all addr")
@@ -107,13 +109,12 @@ func main() {
     case mode == "srv":
       go Server(ctx, ch, bchan, addr)
       <-bchan
-      // syscall.Sleep(10 * 1000 * 1000 * 1000)
     case mode == "cl":
-      go Client(ctx, ch, addr)
+      go Client(ctx, ch, tout, addr)
     case mode == "all":
       go Server(ctx, ch, bchan, addr)
       <-bchan
-      go Client(ctx, ch, addr)
+      go Client(ctx, ch, tout, addr)
       <-ch
     }
     fmt.Println("main: Waiting to finish")

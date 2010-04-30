@@ -4,7 +4,7 @@ import "os"
 import rt "runtime"
 import "strconv"
 
-// #include "get_errno.c"
+// #include <zmq.h>
 import "C"
 
 
@@ -64,11 +64,11 @@ type ErrKnow interface {
 type ZmqErrno int
 
 func (p ZmqErrno) String() string {
-	return C.GoString(C.zmq_strerror(C.int(p)))
+  return C.GoString(C.zmq_strerror(C.int(p)))
 }
 
 func (p ZmqErrno) IsA(err os.Errno) bool {
-	return int64(p) == int64(err)
+  return int64(p) == int64(err)
 }
 
 func (p *libZmqProvider) GetError() os.Error {

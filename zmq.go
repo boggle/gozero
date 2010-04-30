@@ -9,6 +9,7 @@ import . "unsafe/coffer"
 
 // #include <zmq.h>
 // #include <stdlib.h>
+// int is_null(void* ptr) { if (ptr == NULL) return 1; return 0; }
 import "C"
 
 
@@ -55,12 +56,12 @@ type Provider interface {
 
   NewContext(initArgs InitArgs) (Context, os.Error)
   NewMessage() Message
-	
-	// TODO Watch NewWatch()
+
+  // TODO Watch NewWatch()
 
   Version() (major int, minor int, pl int)
 
-	Sleep(secs int)
+  Sleep(secs int)
 }
 
 type Provided interface {
@@ -101,9 +102,9 @@ type Message interface {
   GetData(buf *Buffer) (n int, err os.Error)
   SetData(buf *Buffer) (n int, err os.Error)
 
-	// TODO Move(msg Message)
-	// TODO Copy(msg Message)
-	// TODO AliasData
+  // TODO Move(msg Message)
+  // TODO Copy(msg Message)
+  // TODO AliasData
 
   Size() int
 }
@@ -171,8 +172,10 @@ func (p *libZmqProvider) NewMessage() Message {
 }
 
 func (p *libZmqProvider) Sleep(secs int) {
-	if (secs < 0) { return }
-	C.zmq_sleep(C.int(secs))
+  if secs < 0 {
+    return
+  }
+  C.zmq_sleep(C.int(secs))
 }
 
 func (p *libZmqProvider) Version() (major int, minor int, pl int) {
@@ -257,7 +260,9 @@ func (p *lzmqMessage) SetData(buf *Buffer) (n int, err os.Error) {
     return 0, nil
   }
   err = p.allocate(n)
-	if (err != nil) { return 0, err }
+  if err != nil {
+    return 0, err
+  }
 
   start := p.data()
   var coffr *Coffer
@@ -335,11 +340,13 @@ func (p lzmqSocket) Receive(msg Message, flags int) os.Error {
     return os.EINVAL
   }
   lzmqMsg := lzmqMsgHolder.getLzmqMessage()
-	err := lzmqMsg.empty()
-	if (err != nil) { return err } 
+  err := lzmqMsg.empty()
+  if err != nil {
+    return err
+  }
   ret := p.Provider().OkIf(C.zmq_recv(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
   fmt.Println("recv", msg)
-	return ret
+  return ret
 }
 
 func (p lzmqSocket) Send(msg Message, flags int) os.Error {
@@ -353,7 +360,7 @@ func (p lzmqSocket) Send(msg Message, flags int) os.Error {
   lzmqMsg := lzmqMsgHolder.getLzmqMessage()
   ret := p.Provider().OkIf(C.zmq_send(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
   fmt.Println("sent", msg)
-	return ret
+  return ret
 }
 
 func (p lzmqSocket) Flush() os.Error {
@@ -368,5 +375,9 @@ func (p lzmqSocket) Close() os.Error {
   return p.Provider().OkIf(C.zmq_close(unsafe.Pointer(p)) == 0)
 }
 
+
+func isNull(ptr unsafe.Pointer) bool {
+	return int(C.is_null(ptr)) == 0
+}
 
 // {}

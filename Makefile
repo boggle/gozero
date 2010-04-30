@@ -12,13 +12,15 @@ include $(GOROOT)/src/Make.pkg
 
 # include $(GOROOT)/src/pkg/goprotobuf.googlecode.com/hg/Make.protobuf
 
-CLEANFILES+=main $(PKGDIR)/$(TARG).a
+CLEANFILES+=clsrv $(PKGDIR)/$(TARG).a
 
-main: install main.go
-	$(GC) main.go
-	$(LD) -o $@ main.$O
+again: clean install clsrv
+
+clsrv: install clsrv.go
+	$(GC) clsrv.go
+	$(LD) -o $@ clsrv.$O
 
 format: 
 	$(GOFMT) utils.go
 	$(GOFMT) zmq.go
-	$(GOFMT) main.go
+	$(GOFMT) clsrv.go

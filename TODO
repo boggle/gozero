@@ -1,3 +1,5 @@
+- Implement missing methods: Watch, Poll, Msg, etc.
+
 - LL interface: Here for maximal performance...
 - Reduce footshooting chance by moving from *foo **foo and nil on Close()
 
@@ -8,4 +10,5 @@
      control channel)
   - PushForwarder
   - PullForwarder
-  - Helpers for encoding native go format and protobuf
+  - Helpers for encoding native go format and protobuf?
+  - Still wish I knew how to cast []byte into a unsafe.Pointer

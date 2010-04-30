@@ -1,4 +1,4 @@
-THIS IS EXPERIMENTAL, CURRENTLY BROKEN, AND NEEDS YOUR EXPERTISE.
+THIS IS EXPERIMENTAL AND ALPHA
 
 gozero
 ======
@@ -7,49 +7,19 @@ ZMQ bindings for Go.
 
 This is a very early attempt at libzmq bindings to the Go language.
 
-To run this you first need to install github.com/boggle/coffer
+To setup, you first need to install github.com/boggle/coffer
 which is a small package for copying memory between C and go.
 
 Basic contexts, sockets, and messages have been implemented along
 with Send, and Receive.  No Poll, no setSocketOpts at this time.
 
-Out of the box this gives you inproc communication and tcp, see main.go. 
-IPC is broken for some yet unknown reason.  TCP only works with one
-socket per UNIX process, so you can use tcp between go processes but
-not inside a single go process.  Bugs abound.  Wouldnt mind anyone 
-picking this up. Thanks!
-
 Install: make clean install
-Main: make main
+Main: make clsrv
 
 Run
 
-./main cl|srv|all addr
+./clsrv cl|srv|all addr
 
 cl  - client
 srv - server
 all - both
-
-Currently works:
-
-./main all inproc://foo
-
-./main srv tcp://127.0.0.1:5555
-./main cl tcp://127.0.0.1:5555
-
-Broken:
-
-./main all tcp://127.0.0.1:5555
-
-Server never receives
-
-./main all ipc:///tmp/foo
-./main src ipc:///tmp/foo
-./main cl ipc:///tmp/foo
-
-Server never receives
-
-Same code, should all do, but doesn't
-Something weird is likely happening between zmq and the go runtime
-
-
