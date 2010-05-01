@@ -58,6 +58,7 @@ type Provider interface {
   NewContext(initArgs InitArgs) (Context, os.Error)
   NewMessage() Message
 
+
   StartWatch() Watch
 
   Version() (major int, minor int, pl int)
@@ -91,7 +92,6 @@ func EnvGOMAXPROCS() int {
   return 1
 }
 
-
 // Context interface
 //
 // Contexts are always global thread-safe objects
@@ -100,8 +100,53 @@ type Context interface {
   Provided
 
   NewSocket(socketType int) (Socket, os.Error)
+
+	ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcSocketFun) os.Error
+	Poll(items []PollItem, timeout int) (int, os.Error)
+
   Terminate() os.Error
 }
+
+type PollItem C.zmq_pollitem_t
+
+type ProcFdFun func(fd int, events int8, revents int8)
+type ProcSocketFun func(socket Socket, events int8, revents int8)
+
+func SetFdPollItem(pi *PollItem, fd int, events int8) {
+	pi.fd     = C.int(fd)
+	pi.socket = unsafe.Pointer(uintptr(0))
+	pi.events = C.short(events)
+}
+
+func (p lzmqSocket) SetPollItem(pi *PollItem, revents int8) os.Error {
+	if pi == nil { return os.EINVAL }
+	pi.socket  = unsafe.Pointer(uintptr(p))
+	pi.revents = C.short(revents)
+	pi.fd      = 0
+	return nil
+}
+
+func (p lzmqContext) Poll(items []PollItem, timeout int) (int, os.Error) {
+	ret := int(C.zmq_poll((*C.zmq_pollitem_t)(unsafe.Pointer(&items[0])), C.int(len(items)), C.long(timeout)))
+	if (ret >= 0) { return ret, nil }
+	return 0, p.Provider().GetError()
+}
+
+func (p lzmqContext) ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcSocketFun) os.Error {
+	if pi == nil { return os.EINVAL }
+	var ptr uintptr = uintptr(pi.socket)
+	if IsCNullPtr(ptr) { 
+	  if fdFun != nil {
+  		fdFun(int(pi.fd), int8(pi.events), int8(pi.revents))
+		} else { return os.EINVAL } 
+  } else { 
+		if socketFun != nil {
+			socketFun(lzmqSocket(ptr), int8(pi.events), int8(pi.revents))
+		} else { return os.EINVAL }
+	}
+	return nil
+}
+
 
 // Message interface
 //
@@ -135,7 +180,7 @@ type Socket interface {
   Receive(msg Message, flags int) os.Error
   Send(msg Message, flags int) os.Error
 
-  // TODO: Poll
+	SetPollItem(pi *PollItem, revents int8) os.Error
 
   Flush() os.Error
 }
@@ -370,6 +415,13 @@ func (p *lzmqMessage) Close() os.Error {
 
 // ******** lzmq: Sockets ********
 
+// For casting
+type lzmqSocketHolder interface {
+	Socket
+	
+	getLzmqSocket() lzmqSocket
+}
+
 // libzmq socket wrapper
 type lzmqSocket uintptr
 
@@ -383,6 +435,10 @@ func (p lzmqContext) NewSocket(socketType int) (Socket, os.Error) {
     return nil, p.Provider().GetError()
   }
   return lzmqSocket(ptr), nil
+}
+
+func (p lzmqSocket) getLzmqSocket() lzmqSocket {
+	return p
 }
 
 func (p lzmqSocket) Provider() Provider { return LibZmqProvider() }
