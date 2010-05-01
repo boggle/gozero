@@ -1,4 +1,4 @@
-- Implement missing methods: Poll
+- Implement missing methods: Fix Zerocopy API mem handling, SetSockOpt
 
 - Get some test coverage by implementing the tutorial stuff from zeromq.org
 

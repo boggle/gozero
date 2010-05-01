@@ -9,9 +9,12 @@ import "strconv"
 import . "unsafe/coffer"
 import . "gonewrong"
 
+// #include <u.h>
 // #include <zmq.h>
 // #include <stdlib.h>
+// extern void free_mem_coffer(uintptr p0, uintptr p1);
 import "C"
+
 
 
 // ******** Global ZMQ Constants ********
@@ -57,7 +60,6 @@ type Provider interface {
 
   NewContext(initArgs InitArgs) (Context, os.Error)
   NewMessage() Message
-
 
   StartWatch() Watch
 
@@ -158,8 +160,8 @@ type Message interface {
   WriteTo(buf *Buffer) (n int, err os.Error)
   ReadFrom(buf *Buffer) (n int, err os.Error)
 
-	// GetData(coffer Coffer) os.Error
-	// SetData(coffer Coffer) os.Error
+	GetData(coffer *PtrCoffer) os.Error
+	SetData(coffer *MemCoffer) os.Error
 
   MoveTo(msg Message) os.Error
   CopyTo(msg Message) os.Error
@@ -396,6 +398,19 @@ func (p *lzmqMessage) ReadFrom(buf *Buffer) (n int, err os.Error) {
   return int(n64), err
 }
 
+func (p *lzmqMessage) GetData(coffer *PtrCoffer) os.Error {
+	if (coffer == nil) { return os.EINVAL }
+	defer p.empty()
+	// This is flaky wrt freeing
+	return coffer.InitPtrCoffer(p.data(), p.Size())
+}
+
+func (p *lzmqMessage) SetData(coffer *MemCoffer) os.Error {
+	data   := unsafe.Pointer(coffer.GetBaseAddr())
+	// Unsure if this is correct
+	return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), &C.free_mem_coffer, unsafe.Pointer(coffer)) == 0)
+}
+
 func (p *lzmqMessage) ptr() *C.zmq_msg_t {
   return (*C.zmq_msg_t)(unsafe.Pointer(p))
 }
@@ -510,6 +525,11 @@ type lzmqWatch uintptr
 
 func (p lzmqWatch) Stop() uint64 {
 	return uint64(C.zmq_stopwatch_stop(unsafe.Pointer(p)))
+}
+
+//export free_mem_coffer
+func freeMemCoffer(base uintptr, hint uintptr) {
+  ((*MemCoffer)(unsafe.Pointer(hint))).Close()
 }
 
 // {}
