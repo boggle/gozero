@@ -1,8 +1,12 @@
-- Implement missing methods: Fix Zerocopy API mem handling, SetSockOpt
+- LL interface: Here for maximal performance...
+
+- Seriously think about memory management / who free's what etc.
+  - Interesting cases: SetBinDataSockOpt, Send/Receive w. Coffer from Go
+  - Document behaviour
+  - Maybe introduce few bool flags to be more safe wrt mem
 
 - Get some test coverage by implementing the tutorial stuff from zeromq.org
 
-- LL interface: Here for maximal performance...
 - Reduce footshooting chance by moving from *foo **foo and nil on Close()
 
 - Thoughts about HL interface:
@@ -10,11 +14,6 @@
 	- SocketManager: Manages Sockets. :-) Requires Reification of LL interface into go messages
     (Create Socket, Drop Socket etc. or clever use of lambdas sent to SocketManager via some
      control channel)
-  - PushForwarder
-  - PullForwarder
+  - PushForwarder / PullForwarder vs zmq inproc comm via per-thread socket (How to do that...)
 	- Channel registry
   - Helpers for encoding native go format and protobuf?
-  - Still wish I knew how to cast []byte into a unsafe.Pointer
-
-- I really need to think about leaks, esp concerning setsockopt and watches, its not totally clear
-  who frees what when

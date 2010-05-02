@@ -179,6 +179,11 @@ type Socket interface {
   Bind(address string) os.Error
   Connect(address string) os.Error
 
+	SetInt64SockOpt(option int, value int64) os.Error
+	SetUInt64SockOpt(option int, value uint64) os.Error
+	SetBinaryDataSockOpt(option int, value []byte) os.Error
+	SetStringSockOpt(option int, value string) os.Error
+
   Receive(msg Message, flags int) os.Error
   Send(msg Message, flags int) os.Error
 
@@ -472,6 +477,29 @@ func (p lzmqSocket) Connect(address string) os.Error {
   // apparantly freed by zmq
   c_addr := C.CString(address)
   return p.Provider().OkIf(C.zmq_connect(ptr, c_addr) == 0)
+}
+
+func (p lzmqSocket)	SetInt64SockOpt(option int, value int64) os.Error {
+	// TODO CheckMem
+	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
+}
+
+func (p lzmqSocket)	SetUInt64SockOpt(option int, value uint64) os.Error {
+	// TODO CheckMem
+	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
+}
+
+func (p lzmqSocket)	SetBinaryDataSockOpt(option int, value []byte) os.Error {
+	// TODO CheckMem
+	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value[0]), C.size_t(len(value))) == 0)
+}
+
+func (p lzmqSocket)	SetStringSockOpt(option int, value string) os.Error {
+	cstring := (unsafe.Pointer)(C.CString(value))
+	defer C.free(cstring)
+
+	// TODO CheckMem
+	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), cstring, C.size_t(len(value))) == 0)
 }
 
 func (p lzmqSocket) Receive(msg Message, flags int) os.Error {
