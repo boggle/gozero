@@ -7,6 +7,8 @@ import .  "gonewrong"
 import rt "runtime"
 import "os"
 import "strconv"
+import "time"
+
 
 func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
   rt.LockOSThread()
@@ -83,7 +85,12 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
   // (If you forget this and defer close the socket,
   // your message might not be transmitted at all)
   fmt.Printf("client: Waiting for zmq to deliver\n")
-  cl.Provider().Sleep(tout)
+  time.Sleep( (int64)(tout * 1e9) )
+}
+
+func usage() {
+	fmt.Println(os.Args[0], "srv|cl|all cl-timeout(ignored if srv) zmqaddr")
+    os.Exit(1)
 }
 
 func main() {
@@ -96,8 +103,7 @@ func main() {
   bchan := make(chan bool)
 
   if len(os.Args) != 4 {
-    fmt.Println(os.Args[0], "srv|cl|all cl-timeout(ignored if srv) zmqaddr")
-    os.Exit(1)
+	usage()
   } else {
     mode := os.Args[1]
     tout, err := strconv.Atoi(os.Args[2])
@@ -105,9 +111,8 @@ func main() {
     addr := os.Args[3]
     switch {
     default:
-      fmt.Println(os.Args[0], "srv|cl|all addr")
-      os.Exit(1)
-    case mode == "srv":
+    	usage()
+	case mode == "srv":
       go Server(ctx, ch, bchan, addr)
       <-bchan
     case mode == "cl":
@@ -121,5 +126,7 @@ func main() {
     fmt.Println("main: Waiting to finish")
 
     <-ch
+    time.Sleep((int64)(tout * 1e9))
   }
+
 }
