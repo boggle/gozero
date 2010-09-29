@@ -14,7 +14,7 @@ func Server(ctx Context, ch chan bool, bchan chan bool, addr string) {
 
   defer func() { ch <- true }()
 
-  srv, err := ctx.NewSocket(ZmqP2P)
+  srv, err := ctx.NewSocket(ZmqPair)
   OkIf(err != nil, err)
   defer srv.Close()
 
@@ -51,7 +51,7 @@ func Client(ctx Context, ch chan bool, tout int, addr string) {
 
   defer func() { ch <- true }()
 
-  cl, err := ctx.NewSocket(ZmqP2P)
+  cl, err := ctx.NewSocket(ZmqPair)
   OkIf(err != nil, err)
   defer cl.Close()
 
