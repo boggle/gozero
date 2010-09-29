@@ -1,9 +1,9 @@
 package main
 
 import "fmt"
-import . "zmq"
-import . "bytes"
-import . "gonewrong"
+import .  "zmq"
+import .  "bytes"
+import .  "gonewrong"
 import rt "runtime"
 import "os"
 import "strconv"
