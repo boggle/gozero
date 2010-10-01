@@ -1,12 +1,13 @@
-include $(GOROOT)/src/Make.$(GOARCH)
+include $(GOROOT)/src/Make.inc
 
 PKGDIR=$(GOROOT)/pkg/$(GOOS)_$(GOARCH)
 
 TARG=zmq
 CGOFILES=zmq.go
-CGO_CFLAGS=-I. -I "$(GOROOT)/include"
+CGO_CFLAGS=-I. -I "$(GOROOT)/include" -I/usr/local/include
 CGO_LDFLAGS=-lzmq
 GOFMT=$(GOROOT)/bin/gofmt -tabwidth=2 -spaces=true -tabindent=false -w 
+#GOFMT=$(GOROOT)/bin/gofmt -w
 
 include $(GOROOT)/src/Make.pkg
 
