@@ -12,100 +12,86 @@ import . "gonewrong"
 // #include <u.h>
 // #include <zmq.h>
 // #include <stdlib.h>
-// extern void free_mem_coffer(uintptr p0, uintptr p1);
 import "C"
 
 
-// ******** Global ZMQ Constants ********
+// ******** Global ZMQ Constants *********************************************
 
 const (
-  ZmqPair       = C.ZMQ_PAIR
-  ZmqPub        = C.ZMQ_PUB
-  ZmqSub        = C.ZMQ_SUB
-  ZmqReq        = C.ZMQ_REQ
-  ZmqRep        = C.ZMQ_REP
-  ZmqXReq       = C.ZMQ_XREQ
-  ZmqXRep       = C.ZMQ_XREP
-  ZmqUpstream   = C.ZMQ_PULL
-  ZmqDownstream = C.ZMQ_PUSH
-  ZmqNoBlock    = C.ZMQ_NOBLOCK
-  ZmqSndMore    = C.ZMQ_SNDMORE
-  //	ZmqNoFlush     = C.ZMQ_NOFLUSH    // coming back?
-  ZmqPollIn  = C.ZMQ_POLLIN
-  ZmqPollOut = C.ZMQ_POLLOUT
-  ZmqPollErr = C.ZMQ_POLLERR
-  ZmqHWM     = C.ZMQ_HWM
-  //	ZmqLWM         = C.ZMQ_LWM
-  ZmqSwap        = C.ZMQ_SWAP
-  ZmqAffinity    = C.ZMQ_AFFINITY
-  ZmqIdentitiy   = C.ZMQ_IDENTITY
-  ZmqRate        = C.ZMQ_RATE
-  ZmqSubscribe   = C.ZMQ_SUBSCRIBE
-  ZmqUnsubscribe = C.ZMQ_UNSUBSCRIBE
-  ZmqRecoveryIVL = C.ZMQ_RECOVERY_IVL
-  ZmqMCastLoop   = C.ZMQ_MCAST_LOOP
-  ZmqSendBuf     = C.ZMQ_SNDBUF // remove dups?
-  ZmqSndBuf      = C.ZMQ_SNDBUF
-  ZmqRecvBuf     = C.ZMQ_RCVBUF
-  ZmqRcvBuf      = C.ZMQ_RCVBUF
+    ZmqPair        = C.ZMQ_PAIR
+    ZmqPub         = C.ZMQ_PUB
+    ZmqSub         = C.ZMQ_SUB
+    ZmqReq         = C.ZMQ_REQ
+    ZmqRep         = C.ZMQ_REP
+    ZmqXReq        = C.ZMQ_XREQ
+    ZmqXRep        = C.ZMQ_XREP
+    ZmqUpstream    = C.ZMQ_PULL
+    ZmqDownstream  = C.ZMQ_PUSH
+
+    ZmqHWM         = C.ZMQ_HWM
+    ZmqSwap        = C.ZMQ_SWAP
+    ZmqAffinity    = C.ZMQ_AFFINITY
+    ZmqIdentitiy   = C.ZMQ_IDENTITY
+    ZmqSubscribe   = C.ZMQ_SUBSCRIBE
+    ZmqUnsubscribe = C.ZMQ_UNSUBSCRIBE
+    ZmqRate        = C.ZMQ_RATE
+    ZmqRecoveryIVL = C.ZMQ_RECOVERY_IVL
+    ZmqMCastLoop   = C.ZMQ_MCAST_LOOP
+    ZmqSndBuf      = C.ZMQ_SNDBUF
+    ZmqRcvBuf      = C.ZMQ_RCVBUF
+	ZmqRcvMore     = C.ZMQ_RCVMORE
+
+	ZmqNoBlock     = C.ZMQ_NOBLOCK
+	ZmqSndMore     = C.ZMQ_SNDMORE
 )
 
 
-// ******** ZMQ Interfaces ********
+// ******** ZMQ Interfaces ***************************************************
 
 type Provider interface {
-  ErrKnow // implemented in utils.go
+    ErrKnow
 
-  NewContext(initArgs InitArgs) (Context, os.Error)
-  NewMessage() Message
+    NewContext(initArgs InitArgs) (Context, os.Error)
+    NewMessage() Message
 
-  //	StartWatch() Watch
-
-  Version() (major int, minor int, pl int)
-
-  //Sleep(secs int)
+    Version() (major int, minor int, pl int)
 }
 
 type Provided interface {
-  Provider() Provider
+    Provider() Provider
 }
 
 // Arguments to New Context
 type InitArgs struct {
-  IoThreads int
+    IoThreads int
 }
 
-// Sensible default init args as per most recent zmq docs - use one I/O thread by default.
+// Sensible default init args as per most recent zmq docs 
+// (uses one I/O thread by default).
 func DefaultInitArgs() InitArgs {
-  return InitArgs{IoThreads: 1}
+    return InitArgs{IoThreads: 1}
 }
 
 // Integer value of environment variable GOMAXPROCS if > 1, 1 otherwise
 func EnvGOMAXPROCS() int {
-  var maxProcs, error = strconv.Atoi(os.Getenv("GOMAXPROCS"))
-  if error == nil && maxProcs > 1 {
-    return maxProcs
-  }
-  return 1
+    var maxProcs, error = strconv.Atoi(os.Getenv("GOMAXPROCS"))
+    if error == nil && maxProcs > 1 {
+        return maxProcs
+    }
+    return 1
 }
 
 // Context interface
 //
 // Contexts are always global thread-safe objects
 type Context interface {
-  io.Closer
-  Provided
+    io.Closer
+    Provided
 
-  NewSocket(socketType int) (Socket, os.Error)
-
-  ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcSocketFun) os.Error
-  Poll(items []PollItem, timeout int) (int, os.Error)
-
-  Terminate() os.Error
-}
-
-func Crap() {
-  C.free_mem_coffer(0, 0)
+    NewSocket(socketType int) (Socket, os.Error)
+    ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcSocketFun) os.Error
+    Poll(items []PollItem, timeout int) (int, os.Error)
+    Terminate() os.Error
 }
 
 type PollItem C.zmq_pollitem_t
@@ -114,48 +100,48 @@ type ProcFdFun func(fd int, events int8, revents int8)
 type ProcSocketFun func(socket Socket, events int8, revents int8)
 
 func SetFdPollItem(pi *PollItem, fd int, events int8) {
-  pi.fd = C.int(fd)
-  pi.socket = unsafe.Pointer(uintptr(0))
-  pi.events = C.short(events)
+    pi.fd = C.int(fd)
+    pi.socket = unsafe.Pointer(uintptr(0))
+    pi.events = C.short(events)
 }
 
 func (p lzmqSocket) SetPollItem(pi *PollItem, revents int8) os.Error {
-  if pi == nil {
-    return os.EINVAL
-  }
-  pi.socket = unsafe.Pointer(uintptr(p))
-  pi.revents = C.short(revents)
-  pi.fd = 0
-  return nil
+    if pi == nil {
+        return os.EINVAL
+    }
+    pi.socket = unsafe.Pointer(uintptr(p))
+    pi.revents = C.short(revents)
+    pi.fd = 0
+    return nil
 }
 
 func (p lzmqContext) Poll(items []PollItem, timeout int) (int, os.Error) {
-  ret := int(C.zmq_poll((*C.zmq_pollitem_t)(unsafe.Pointer(&items[0])), C.int(len(items)), C.long(timeout)))
-  if ret >= 0 {
-    return ret, nil
-  }
-  return 0, p.Provider().GetError()
+    ret := int(C.zmq_poll((*C.zmq_pollitem_t)(unsafe.Pointer(&items[0])), C.int(len(items)), C.long(timeout)))
+    if ret >= 0 {
+        return ret, nil
+    }
+    return 0, p.Provider().GetError()
 }
 
 func (p lzmqContext) ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcSocketFun) os.Error {
-  if pi == nil {
-    return os.EINVAL
-  }
-  var ptr uintptr = uintptr(pi.socket)
-  if IsCNullPtr(ptr) {
-    if fdFun != nil {
-      fdFun(int(pi.fd), int8(pi.events), int8(pi.revents))
-    } else {
-      return os.EINVAL
+    if pi == nil {
+        return os.EINVAL
     }
-  } else {
-    if socketFun != nil {
-      socketFun(lzmqSocket(ptr), int8(pi.events), int8(pi.revents))
+    var ptr uintptr = uintptr(pi.socket)
+    if IsCNullPtr(ptr) {
+        if fdFun != nil {
+            fdFun(int(pi.fd), int8(pi.events), int8(pi.revents))
+        } else {
+            return os.EINVAL
+        }
     } else {
-      return os.EINVAL
+        if socketFun != nil {
+            socketFun(lzmqSocket(ptr), int8(pi.events), int8(pi.revents))
+        } else {
+            return os.EINVAL
+        }
     }
-  }
-  return nil
+    return nil
 }
 
 
@@ -163,58 +149,63 @@ func (p lzmqContext) ProcPollItem(pi *PollItem, fdFun ProcFdFun, socketFun ProcS
 //
 // Messages may only be used reliably with sockets from the same provider
 type Message interface {
-  io.Closer
-  Provided
+    io.Closer
+    Provided
 
-  WriteTo(buf *Buffer) (n int, err os.Error)
-  ReadFrom(buf *Buffer) (n int, err os.Error)
+    WriteTo(buf *Buffer) (n int, err os.Error)
+    ReadFrom(buf *Buffer) (n int, err os.Error)
 
-  GetData(coffer *PtrCoffer) os.Error
-  SetData(coffer *MemCoffer) os.Error
+    GetData(coffer *PtrCoffer) os.Error
+    SetData(coffer *MemCoffer) os.Error
 
-  MoveTo(msg Message) os.Error
-  CopyTo(msg Message) os.Error
+    MoveTo(msg Message) os.Error
+    CopyTo(msg Message) os.Error
 
-  Size() int
+    Size() int
 }
 
 // Socket interface
 //
 // Sockets are typically thread-bound
 type Socket interface {
-  io.Closer
-  Provided
+    io.Closer
+    Provided
 
-  Bind(address string) os.Error
-  Connect(address string) os.Error
+    Bind(address string) os.Error
+    Connect(address string) os.Error
 
-	SetInt64SockOpt(option int, value int64) os.Error
-	SetUInt64SockOpt(option int, value uint64) os.Error
-	SetBinaryDataSockOpt(option int, value []byte) os.Error
-	SetStringSockOpt(option int, value string) os.Error
+    SetInt64SockOpt(option int, value int64) os.Error
+    SetUInt64SockOpt(option int, value uint64) os.Error
+    SetBinaryDataSockOpt(option int, value []byte) os.Error
+    SetStringSockOpt(option int, value string) os.Error
 
-  Receive(msg Message, flags int) os.Error
-  Send(msg Message, flags int) os.Error
+    Receive(msg Message, flags int) os.Error
+    Send(msg Message, flags int) os.Error
 
-  SetPollItem(pi *PollItem, revents int8) os.Error
+    SetPollItem(pi *PollItem, revents int8) os.Error
 
-  //	Flush() os.Error
-}
-
-// Watch interface
-type Watch interface {
-  Stop() uint64
+    //	Flush() os.Error
 }
 
 
-// ******** lzmq: Provider ********
+
+
+// ******** lzmq: Provider ***************************************************
 
 // libzmq provider impl
-func LibZmqProvider() Provider { return _libZmqProvider }
-
 type libZmqProvider struct{}
 
-var _libZmqProvider = new(libZmqProvider)
+var theLibZmqProvider = new(libZmqProvider)
+
+func (p libZmqProvider) Provider() Provider {
+	return theLibZmqProvider
+}
+
+func LibZmqProvider() Provider {
+	return theLibZmqProvider
+}
+
+
 
 
 // ******** lzmq: Context ********
@@ -232,214 +223,208 @@ type lzmqContext uintptr
 // been destructed.  This requires to have at least one running go routine
 // with a live referene to the context.
 func (p libZmqProvider) NewContext(args InitArgs) (Context, os.Error) {
-  contextPtr := C.zmq_init(
-    C.int(args.IoThreads))
+    contextPtr := C.zmq_init(C.int(args.IoThreads))
 
-  if IsCNullPtr(uintptr(contextPtr)) {
-    return nil, p.GetError()
-  }
+    if IsCNullPtr(uintptr(contextPtr)) {
+        return nil, p.GetError()
+    }
 
-  lzmqContext := lzmqContext(contextPtr)
-  return lzmqContext, nil
+    lzmqContext := lzmqContext(contextPtr)
+    return lzmqContext, nil
 }
 
 func (p *libZmqProvider) NewMessage() Message {
-  msg := new(lzmqMessage)
-  return msg
+    msg := new(lzmqMessage)
+    return msg
 }
-
-/*func (p *libZmqProvider) StartWatch() Watch {
-  watch := uintptr(C.zmq_stopwatch_start())
-  return lzmqWatch(watch)
-}*/
 
 // Type of error codes used by LibZmq
 //
 // Necessary since lzmq provides its own zmq_errno, zmq_strerror functions
 type LibZmqErrno int
 
-func (p LibZmqErrno) String() string { return C.GoString(C.zmq_strerror(C.int(p))) }
+func (p LibZmqErrno) String() string { 
+	return C.GoString(C.zmq_strerror(C.int(p))) 
+}
 
 func (p *libZmqProvider) GetError() os.Error {
-  return LibZmqErrno(C.zmq_errno())
+    return LibZmqErrno(C.zmq_errno())
 }
 
-func (p *libZmqProvider) OkIf(cond bool) os.Error { return p.ErrorIf(!cond) }
+func (p *libZmqProvider) OkIf(cond bool) os.Error { 
+	return p.ErrorIf(!cond) 
+}
 
 func (p *libZmqProvider) ErrorIf(cond bool) os.Error {
-  if cond {
-    err := p.GetError()
-    if err != nil {
-      return err
+    if cond {
+        err := p.GetError()
+        if err != nil {
+            return err
+        }
     }
-  }
-  return nil
+    return nil
 }
-
-/*func (p *libZmqProvider) Sleep(secs int) {
-	if secs < 0 {
-		return
-	}
-	C.zmq_sleep(C.int(secs))
-}*/
 
 func (p *libZmqProvider) Version() (major int, minor int, pl int) {
-  C.zmq_version((*C.int)(unsafe.Pointer(&major)), (*C.int)(unsafe.Pointer(&minor)), (*C.int)(unsafe.Pointer(&pl)))
-  return
+    C.zmq_version((*C.int)(unsafe.Pointer(&major)), (*C.int)(unsafe.Pointer(&minor)), (*C.int)(unsafe.Pointer(&pl)))
+    return
 }
 
-func (p lzmqContext) Provider() Provider { return LibZmqProvider() }
+func (p lzmqContext) Provider() Provider { 
+	return theLibZmqProvider
+}
 
 // Calls Terminate()
 func (p lzmqContext) Close() os.Error {
-  return p.Terminate()
+    return p.Terminate()
 }
 
 // Calls zmq_term on underlying context pointer
 //
 // Only call once
 func (p lzmqContext) Terminate() os.Error {
-  ch := make(chan os.Error)
-  ptr := unsafe.Pointer(p)
-  if ptr != nil {
-    // Needs to run in separate go routine to safely lock the OS Thread
-    // and synchronize via channel to know when we're done
-    Thunk(func() {
-      ch <- p.Provider().OkIf(C.zmq_term(ptr) == 0)
-    }).RunInOSThread()
-    // Wait for completion
-    return <-ch
-  }
-  return nil
+    ch := make(chan os.Error)
+    ptr := unsafe.Pointer(p)
+    if ptr != nil {
+        // Needs to run in separate go routine to safely lock the OS Thread
+        // and synchronize via channel to know when we're done
+        Thunk(func() {
+            ch <- p.Provider().OkIf(C.zmq_term(ptr) == 0)
+        }).RunInOSThread()
+        // Wait for completion
+        return <-ch
+    }
+    return nil
 }
 
 
 // ******** lzmq: Messages ********
 
 type lzmqMessageHolder interface {
-  Message
+    Message
 
-  getLzmqMessage() *lzmqMessage
+    getLzmqMessage() *lzmqMessage
 }
 
 type lzmqMessage C.zmq_msg_t
 
 func (p *lzmqMessage) empty() os.Error {
-  return p.Provider().OkIf(C.zmq_msg_init(p.ptr()) == 0)
+    return p.Provider().OkIf(C.zmq_msg_init(p.ptr()) == 0)
 }
 
+
 func (p *lzmqMessage) allocate(length int) os.Error {
-  return p.Provider().OkIf(C.zmq_msg_init_size(p.ptr(), C.size_t(length)) == 0)
+    return p.Provider().OkIf(C.zmq_msg_init_size(p.ptr(), C.size_t(length)) == 0)
 }
 
 func (p *lzmqMessage) Provider() Provider { return LibZmqProvider() }
 
 func (p *lzmqMessage) Size() int {
-  // size_t always fits int, we do not allocate larger messages
-  return int(C.zmq_msg_size(p.ptr()))
+    // size_t always fits int, we do not allocate larger messages
+    return int(C.zmq_msg_size(p.ptr()))
 }
 
 func (p *lzmqMessage) MoveTo(msg Message) os.Error {
-  if msg == nil {
-    return os.EINVAL
-  }
-  lzmqMsgHolder, err := msg.(lzmqMessageHolder)
-  if err == false {
-    return os.EINVAL
-  }
-  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+    if msg == nil {
+        return os.EINVAL
+    }
+    lzmqMsgHolder, err := msg.(lzmqMessageHolder)
+    if err == false {
+        return os.EINVAL
+    }
+    lzmqMsg := lzmqMsgHolder.getLzmqMessage()
 
-  return p.Provider().OkIf(C.zmq_msg_move(lzmqMsg.ptr(), p.ptr()) == 0)
+    return p.Provider().OkIf(C.zmq_msg_move(lzmqMsg.ptr(), p.ptr()) == 0)
 }
 
 func (p *lzmqMessage) CopyTo(msg Message) os.Error {
-  if msg == nil {
-    return os.EINVAL
-  }
-  lzmqMsgHolder, err := msg.(lzmqMessageHolder)
-  if err == false {
-    return os.EINVAL
-  }
-  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+    if msg == nil {
+        return os.EINVAL
+    }
+    lzmqMsgHolder, err := msg.(lzmqMessageHolder)
+    if err == false {
+        return os.EINVAL
+    }
+    lzmqMsg := lzmqMsgHolder.getLzmqMessage()
 
-  return p.Provider().OkIf(C.zmq_msg_copy(lzmqMsg.ptr(), p.ptr()) == 0)
+    return p.Provider().OkIf(C.zmq_msg_copy(lzmqMsg.ptr(), p.ptr()) == 0)
 }
 
 func (p *lzmqMessage) WriteTo(buf *Buffer) (n int, err os.Error) {
-  n = p.Size()
-  if n <= 0 {
-    return 0, nil
-  }
-  start := p.data()
-  var coffr Coffer
-  coffr, err = NewPtrCoffer(start, n)
-  if err != nil {
-    return 0, err
-  }
+    n = p.Size()
+    if n <= 0 {
+        return 0, nil
+    }
+    start := p.data()
+    var coffr Coffer
+    coffr, err = NewPtrCoffer(start, n)
+    if err != nil {
+        return 0, err
+    }
 
-  var n64 int64
-  n64, err = buf.ReadFrom(coffr)
-  if n64 == int64(n) && err == os.EOF {
-    err = nil
-  }
-  return int(n64), err
+    var n64 int64
+    n64, err = buf.ReadFrom(coffr)
+    if n64 == int64(n) && err == os.EOF {
+        err = nil
+    }
+    return int(n64), err
 }
 
 func (p *lzmqMessage) ReadFrom(buf *Buffer) (n int, err os.Error) {
-  n = buf.Len()
-  if n <= 0 {
-    return 0, nil
-  }
-  err = p.allocate(n)
-  if err != nil {
-    return 0, err
-  }
+    n = buf.Len()
+    if n <= 0 {
+        return 0, nil
+    }
+    err = p.allocate(n)
+    if err != nil {
+        return 0, err
+    }
 
-  start := p.data()
-  var coffr Coffer
-  coffr, err = NewPtrCoffer(start, n)
-  if err != nil {
-    return 0, err
-  }
+    start := p.data()
+    var coffr Coffer
+    coffr, err = NewPtrCoffer(start, n)
+    if err != nil {
+        return 0, err
+    }
 
-  var n64 int64
-  n64, err = buf.WriteTo(coffr)
-  if n64 == int64(n) && err == os.EOF {
-    err = nil
-  }
-  return int(n64), err
+    var n64 int64
+    n64, err = buf.WriteTo(coffr)
+    if n64 == int64(n) && err == os.EOF {
+        err = nil
+    }
+    return int(n64), err
 }
 
 func (p *lzmqMessage) GetData(coffer *PtrCoffer) os.Error {
-  if coffer == nil {
-    return os.EINVAL
-  }
-  defer p.empty()
-  // This is flaky wrt freeing
-  return coffer.InitPtrCoffer(p.data(), p.Size())
+    if coffer == nil {
+        return os.EINVAL
+    }
+    defer p.empty()
+    // This is flaky wrt freeing
+    return coffer.InitPtrCoffer(p.data(), p.Size())
 }
 
 func (p *lzmqMessage) SetData(coffer *MemCoffer) os.Error {
-  data := unsafe.Pointer(coffer.GetBaseAddr())
-  // Unsure if this is correct
-  //	return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), &C.free_mem_coffer, unsafe.Pointer(coffer)) == 0)
-  return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), (*[0]uint8)(CCallableFreeFuncPtr()), unsafe.Pointer(coffer)) == 0)
+    data := unsafe.Pointer(coffer.GetBasePtr())
+    // Unsure if this is correct
+    //	return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), &C.free_mem_coffer, unsafe.Pointer(coffer)) == 0)
+    return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), (*[0]uint8)(C.NULL), unsafe.Pointer(coffer)) == 0)
 }
 
 func (p *lzmqMessage) ptr() *C.zmq_msg_t {
-  return (*C.zmq_msg_t)(unsafe.Pointer(p))
+    return (*C.zmq_msg_t)(unsafe.Pointer(p))
 }
 
 func (p *lzmqMessage) data() uintptr {
-  return uintptr(C.zmq_msg_data(p.ptr()))
+    return uintptr(C.zmq_msg_data(p.ptr()))
 }
 
 func (p *lzmqMessage) getLzmqMessage() *lzmqMessage {
-  return p
+    return p
 }
 
 func (p *lzmqMessage) Close() os.Error {
-  return p.Provider().OkIf(C.zmq_msg_close(p.ptr()) == 0)
+    return p.Provider().OkIf(C.zmq_msg_close(p.ptr()) == 0)
 }
 
 
@@ -447,9 +432,9 @@ func (p *lzmqMessage) Close() os.Error {
 
 // For casting
 type lzmqSocketHolder interface {
-  Socket
+    Socket
 
-  getLzmqSocket() lzmqSocket
+    getLzmqSocket() lzmqSocket
 }
 
 // libzmq socket wrapper
@@ -460,88 +445,88 @@ type lzmqSocket uintptr
 // Sockets only must be used from a fixed OSThread. This may be achieved
 // by conveniently using Thunk.NewOSThread() or by calling runtime.LockOSThread()
 func (p lzmqContext) NewSocket(socketType int) (Socket, os.Error) {
-  ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
-  if IsCNullPtr(uintptr(ptr)) {
-    return nil, p.Provider().GetError()
-  }
-  return lzmqSocket(ptr), nil
+    ptr := unsafe.Pointer(C.zmq_socket(unsafe.Pointer(p), C.int(socketType)))
+    if IsCNullPtr(uintptr(ptr)) {
+        return nil, p.Provider().GetError()
+    }
+    return lzmqSocket(ptr), nil
 }
 
 func (p lzmqSocket) getLzmqSocket() lzmqSocket {
-  return p
+    return p
 }
 
 func (p lzmqSocket) Provider() Provider { return LibZmqProvider() }
 
 // Bind server socket
 func (p lzmqSocket) Bind(address string) os.Error {
-  ptr := unsafe.Pointer(p)
-  // apparantly freed by zmq
-  c_addr := C.CString(address)
-  return p.Provider().OkIf(C.zmq_bind(ptr, c_addr) == 0)
+    ptr := unsafe.Pointer(p)
+    // apparantly freed by zmq
+    c_addr := C.CString(address)
+    return p.Provider().OkIf(C.zmq_bind(ptr, c_addr) == 0)
 }
 
 // Connect client socket
 func (p lzmqSocket) Connect(address string) os.Error {
-  ptr := unsafe.Pointer(p)
-  // apparently freed by zmq
-  c_addr := C.CString(address)
-  return p.Provider().OkIf(C.zmq_connect(ptr, c_addr) == 0)
+    ptr := unsafe.Pointer(p)
+    // apparently freed by zmq
+    c_addr := C.CString(address)
+    return p.Provider().OkIf(C.zmq_connect(ptr, c_addr) == 0)
 }
 
-func (p lzmqSocket)	SetInt64SockOpt(option int, value int64) os.Error {
-	// TODO CheckMem
-	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
+func (p lzmqSocket) SetInt64SockOpt(option int, value int64) os.Error {
+    // TODO CheckMem
+    return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
 }
 
-func (p lzmqSocket)	SetUInt64SockOpt(option int, value uint64) os.Error {
-	// TODO CheckMem
-	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
+func (p lzmqSocket) SetUInt64SockOpt(option int, value uint64) os.Error {
+    // TODO CheckMem
+    return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value), C.size_t(unsafe.Sizeof(value))) == 0)
 }
 
-func (p lzmqSocket)	SetBinaryDataSockOpt(option int, value []byte) os.Error {
-	// TODO CheckMem
-	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value[0]), C.size_t(len(value))) == 0)
+func (p lzmqSocket) SetBinaryDataSockOpt(option int, value []byte) os.Error {
+    // TODO CheckMem
+    return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), unsafe.Pointer(&value[0]), C.size_t(len(value))) == 0)
 }
 
-func (p lzmqSocket)	SetStringSockOpt(option int, value string) os.Error {
-	cstring := (unsafe.Pointer)(C.CString(value))
-	defer C.free(cstring)
+func (p lzmqSocket) SetStringSockOpt(option int, value string) os.Error {
+    cstring := (unsafe.Pointer)(C.CString(value))
+    defer C.free(cstring)
 
-	// TODO CheckMem
-	return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), cstring, C.size_t(len(value))) == 0)
+    // TODO CheckMem
+    return p.Provider().OkIf(C.zmq_setsockopt(unsafe.Pointer(p), C.int(option), cstring, C.size_t(len(value))) == 0)
 }
 
 func (p lzmqSocket) Receive(msg Message, flags int) os.Error {
-  if msg == nil {
-    return os.EINVAL
-  }
-  lzmqMsgHolder, castable := msg.(lzmqMessageHolder)
-  if !castable {
-    return os.EINVAL
-  }
-  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
-  err := lzmqMsg.empty()
-  if err != nil {
-    return err
-  }
-  ret := p.Provider().OkIf(C.zmq_recv(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
-  // fmt.Println("recv", msg)
-  return ret
+    if msg == nil {
+        return os.EINVAL
+    }
+    lzmqMsgHolder, castable := msg.(lzmqMessageHolder)
+    if !castable {
+        return os.EINVAL
+    }
+    lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+    err := lzmqMsg.empty()
+    if err != nil {
+        return err
+    }
+    ret := p.Provider().OkIf(C.zmq_recv(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
+    // fmt.Println("recv", msg)
+    return ret
 }
 
 func (p lzmqSocket) Send(msg Message, flags int) os.Error {
-  if msg == nil {
-    return os.EINVAL
-  }
-  lzmqMsgHolder, err := msg.(lzmqMessageHolder)
-  if err == false {
-    return os.EINVAL
-  }
-  lzmqMsg := lzmqMsgHolder.getLzmqMessage()
-  ret := p.Provider().OkIf(C.zmq_send(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
-  // fmt.Println("sent", msg)
-  return ret
+    if msg == nil {
+        return os.EINVAL
+    }
+    lzmqMsgHolder, err := msg.(lzmqMessageHolder)
+    if err == false {
+        return os.EINVAL
+    }
+    lzmqMsg := lzmqMsgHolder.getLzmqMessage()
+    ret := p.Provider().OkIf(C.zmq_send(unsafe.Pointer(p), lzmqMsg.ptr(), C.int(flags)) == 0)
+    // fmt.Println("sent", msg)
+    return ret
 }
 
 // keep this
@@ -555,7 +540,7 @@ func (p lzmqSocket) Send(msg Message, flags int) os.Error {
 // Expects the executing go routine to still be locked onto an OSThread.
 // May be called only once
 func (p lzmqSocket) Close() os.Error {
-  return p.Provider().OkIf(C.zmq_close(unsafe.Pointer(p)) == 0)
+    return p.Provider().OkIf(C.zmq_close(unsafe.Pointer(p)) == 0)
 }
 
 
@@ -569,7 +554,7 @@ func (p lzmqWatch) Stop() uint64 {
 */
 //export free_mem_coffer
 func freeMemCoffer(base uintptr, hint uintptr) {
-  ((*MemCoffer)(unsafe.Pointer(hint))).Close()
+    ((*MemCoffer)(unsafe.Pointer(hint))).Close()
 }
 
 // {}
