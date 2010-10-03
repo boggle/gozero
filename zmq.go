@@ -12,6 +12,7 @@ import . "gonewrong"
 // #include <u.h>
 // #include <zmq.h>
 // #include <stdlib.h>
+// #include "coffer_cb.h"
 import "C"
 
 
@@ -408,7 +409,7 @@ func (p *lzmqMessage) SetData(coffer *MemCoffer) os.Error {
     data := unsafe.Pointer(coffer.GetBasePtr())
     // Unsure if this is correct
     //	return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), &C.free_mem_coffer, unsafe.Pointer(coffer)) == 0)
-    return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), (*[0]uint8)(C.NULL), unsafe.Pointer(coffer)) == 0)
+    return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), C.CloseMemCofferCb(), unsafe.Pointer(coffer)) == 0)
 }
 
 func (p *lzmqMessage) ptr() *C.zmq_msg_t {

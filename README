@@ -17,6 +17,8 @@ To setup, you first need to install
 github.com/boggle/coffer (for copying memory between C and go)
 github.com/boggle/gonewrong (for error handling)
 
+(During build, these are expected to be located parallel to this directory)
+
 Install: make clean install
 Main: make clsrv
 

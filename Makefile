@@ -4,7 +4,7 @@ PKGDIR=$(GOROOT)/pkg/$(GOOS)_$(GOARCH)
 
 TARG=zmq
 CGOFILES=zmq.go
-CGO_CFLAGS=-I. -I "$(GOROOT)/include" -I/usr/local/include
+CGO_CFLAGS=-I. -I"$(GOROOT)/include" -I"../coffer" -I/usr/local/include
 CGO_LDFLAGS=-lzmq
 GOFMT=$(GOROOT)/bin/gofmt -tabwidth=4 -spaces=true -tabindent=false -w 
 
