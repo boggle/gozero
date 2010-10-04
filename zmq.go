@@ -40,12 +40,39 @@ const (
     ZmqMCastLoop   = C.ZMQ_MCAST_LOOP
     ZmqSndBuf      = C.ZMQ_SNDBUF
     ZmqRcvBuf      = C.ZMQ_RCVBUF
-	ZmqRcvMore     = C.ZMQ_RCVMORE
+    ZmqRcvMore     = C.ZMQ_RCVMORE
 
-	ZmqNoBlock     = C.ZMQ_NOBLOCK
-	ZmqSndMore     = C.ZMQ_SNDMORE
+    ZmqNoBlock     = C.ZMQ_NOBLOCK
+    ZmqSndMore     = C.ZMQ_SNDMORE
+
+    ZmqDelimiter   = C.ZMQ_DELIMITER
+    ZmqVSM         = C.ZMQ_VSM
+    ZmqMsgMore     = C.ZMQ_MSG_MORE
+    ZmqMsgShared   = C.ZMQ_MSG_SHARED
+    ZmqMaxVSMSize  = C.ZMQ_MAX_VSM_SIZE
+
+    ZmqENOTSUP         = C.ENOTSUP
+    ZmqEPROTONOSUPPORT = C.EPROTONOSUPPORT
+    ZmqENOBUFS         = C.ENOBUFS
+    ZmqENETDOWN        = C.ENETDOWN
+    ZmqEADDRINUSE      = C.EADDRINUSE
+    ZmqEADDRNOTAVAIL   = C.EADDRNOTAVAIL
+    ZmqECONNREFUSED    = C.ECONNREFUSED
+    ZmqEINPROGRESS     = C.EINPROGRESS
+
+    ZmqStreamer    = C.ZMQ_STREAMER
+    ZmqForwarder   = C.ZMQ_FORWARDER
+    ZmqQueue       = C.ZMQ_QUEUE
+
+    ZmqPollIn      = C.ZMQ_POLLIN
+    ZmqPollOut     = C.ZMQ_POLLOUT
+    ZmqPollErr     = C.ZMQ_POLLERR
 )
 
+func ZmqEMTHREAD() int { return int(C.EMTHREAD) }
+func ZmqEFSM() int { return int(C.EFSM) }
+func ZmqENOCOMPATPROTO() int { return int(C.ENOCOMPATPROTO) }
+func ZmqETERM() int { return int(C.ETERM) }
 
 // ******** ZMQ Interfaces ***************************************************
 
@@ -407,8 +434,6 @@ func (p *lzmqMessage) GetData(coffer *PtrCoffer) os.Error {
 
 func (p *lzmqMessage) SetData(coffer *MemCoffer) os.Error {
     data := unsafe.Pointer(coffer.GetBasePtr())
-    // Unsure if this is correct
-    //	return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), &C.free_mem_coffer, unsafe.Pointer(coffer)) == 0)
     return p.Provider().OkIf(C.zmq_msg_init_data((*C.zmq_msg_t)(p), data, C.size_t(coffer.Cap()), C.CloseMemCofferCb(), unsafe.Pointer(coffer)) == 0)
 }
 
